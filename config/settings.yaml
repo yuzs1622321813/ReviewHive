@@ -1,0 +1,89 @@
+# ReviewHive 全局配置
+# 所有模型端点均指向本机，无任何云端依赖。
+
+app:
+  name: ReviewHive
+  host: 0.0.0.0
+  port: 9100
+  data_dir: ./data          # SQLite、下载语料、运行产物
+  db_path: ./data/reviewhive.db
+
+models:
+  # 主 LLM：Qwen3.6-35B-A3B（MoE），llama-server OpenAI 兼容接口
+  llm:
+    base_url: http://127.0.0.1:8080/v1
+    model: qwen3.6-35b-a3b
+    temperature: 0.2
+    max_tokens: 4096
+    timeout_seconds: 300
+
+  # 多模态：Qwen3-VL-8B-Instruct，读架构图/截图/扫描文档
+  vision:
+    enabled: true
+    base_url: http://127.0.0.1:8082/v1
+    model: qwen3-vl-8b
+    timeout_seconds: 180
+
+  # 向量嵌入：默认本地 bge-m3（sentence-transformers 直接加载，无需单独起服务）
+  # 下载 Qwen3-Embedding-8B GGUF 后可切换：
+  #   provider: openai
+  #   base_url: http://127.0.0.1:8081/v1
+  #   model: qwen3-embedding-8b
+  embedding:
+    provider: sentence_transformer
+    model_path: ~/.cache/modelscope/hub/models/BAAI/bge-m3
+    device: auto            # auto | cpu | mps
+    batch_size: 16
+    normalize: true
+
+  # 重排：本地 bge-reranker-v2-m3（cross-encoder）
+  reranker:
+    enabled: true
+    model_path: ~/.cache/modelscope/hub/models/BAAI/bge-reranker-v2-m3
+    device: auto
+    top_n: 8
+
+rag:
+  qdrant_url: http://127.0.0.1:6333
+  collection: reviewhive_kb
+  es_url: http://127.0.0.1:9200
+  es_index: reviewhive_kb
+  vector_top_k: 20
+  keyword_top_k: 20
+  rrf_k: 60                 # Reciprocal Rank Fusion 常数
+  chunker:                  # 可插拔切片策略（新增策略见 rag/chunking.py CHUNKERS）
+    strategy: heading       # heading=结构优先（按标题成块）| fixed_window=定长滑窗
+    max_chars: 1500         # 单块上限
+    overlap: 150            # 定长滑窗的块间重叠字符数
+
+review:
+  max_skill_loops: 4        # 单个子 Agent 最多技能调用轮数
+  max_input_chars: 40000    # 单次评审输入上限
+  sub_agents: [security, performance, style, test]
+
+observability:              # 链路追踪（可选）：对接 Arize Phoenix
+  enabled: true             # 关闭后所有埋点退化为 no-op
+  phoenix_url: http://127.0.0.1:6006
+  project: reviewhive
+
+memory:                     # 长期记忆（单用户）：偏好/项目事实/经验教训
+  enabled: true
+  collection: reviewhive_memory
+  recall_top_k: 4           # 每次评审注入的记忆条数
+  lesson_ttl_days: 90       # lesson 未使用超过该天数后归档
+  archive_retention_days: 30
+  compress_threshold: 60    # 活跃记忆超过该数量触发相似合并
+  compress_similarity: 0.85
+  summarize_threshold: 40   # lesson 超过该数量触发 LLM 摘要蒸馏
+  summarize_batch: 12
+  maintain_every_sessions: 5
+  dedup_similarity: 0.9     # 写入新记忆时去重的余弦相似度阈值
+
+project:                    # 项目级评审（reviewhive review ./path）
+  max_files: 10             # 进入 LLM 深审的文件上限
+  min_score: 3              # 触发深审的最低风险分（0 分文件永远跳过）
+  concurrency: 2            # 并行深审文件数（本地模型不宜过高）
+  max_scan_files: 2000      # 静态扫描文件数上限
+  exclude: [".git", ".venv", "venv", "__pycache__", "node_modules", ".tox", "build", "dist", ".eggs"]
+  context_limit: 6000       # 注入单文件评审的接口上下文字符上限
+  emit_scanner_findings: true  # 高精度静态模式直接产出 Finding

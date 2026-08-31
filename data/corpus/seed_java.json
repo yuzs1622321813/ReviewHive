@@ -1,0 +1,122 @@
+[
+  {
+    "source": "seed-java",
+    "kind": "vulnerability",
+    "language": "java",
+    "title": "SQL 注入：字符串拼接构造 SQL",
+    "content": "将外部输入直接拼接进 SQL 语句（如 \"... WHERE id = '\" + userId + \"'\"）会导致 SQL 注入，攻击者可读取或篡改数据库。评审时沿数据流追踪：Controller 参数、HTTP 请求、消息队列载荷都属于污点来源。修复：一律使用 PreparedStatement 参数化查询或 ORM 的参数绑定；MyBatis 中禁用 ${} 拼接用户输入。严重度：可被外部触达时为 critical。",
+    "code": "// 错误\nString sql = \"SELECT * FROM t_user WHERE name = '\" + name + \"'\";\nstmt.executeQuery(sql);\n\n// 正确\nPreparedStatement ps = conn.prepareStatement(\"SELECT * FROM t_user WHERE name = ?\");\nps.setString(1, name);"
+  },
+  {
+    "source": "seed-java",
+    "kind": "vulnerability",
+    "language": "java",
+    "title": "硬编码凭据与密钥",
+    "content": "在源码中硬编码密码、API Key、加密盐属于高危问题：凭据随代码库泄露且无法轮换。评审中发现形如 password/secret/token/apiKey 的字面量赋值应立即标记。修复：迁移到环境变量、配置中心或 KMS，并轮换已泄露的凭据。",
+    "code": "// 错误\nString secret = \"admin123!\";\n\n// 正确\nString secret = System.getenv(\"APP_SECRET\");"
+  },
+  {
+    "source": "seed-java",
+    "kind": "vulnerability",
+    "language": "java",
+    "title": "弱哈希算法用于口令或签名",
+    "content": "MD5、SHA-1 已被证明存在碰撞，不应用于口令存储、令牌生成或签名。口令存储应使用 bcrypt/scrypt/Argon2 等带盐慢哈希；完整性校验场景至少使用 SHA-256。",
+    "code": "// 错误\nString token = Md5Util.md5(password);\n\n// 正确\nString hash = BCrypt.hashpw(password, BCrypt.gensalt());"
+  },
+  {
+    "source": "seed-java",
+    "kind": "vulnerability",
+    "language": "java",
+    "title": "日志注入与敏感信息写日志",
+    "content": "把未净化的用户输入直接写入日志可能导致日志注入（CRLF 伪造日志条目）；把手机号、身份证、令牌明文写入日志会造成数据泄露。修复：日志输出前过滤换行与控制字符；敏感字段脱敏后再输出。",
+    "code": "// 错误\nlog.info(\"login user=\" + input); // input 含 \\n 时可伪造日志\n\n// 正确\nlog.info(\"login user={}\", sanitize(input));"
+  },
+  {
+    "source": "seed-java",
+    "kind": "vulnerability",
+    "language": "java",
+    "title": "不安全的反序列化",
+    "content": "Fastjson 开启 autoType、Jackson 启用 DefaultTyping、原生 ObjectInputStream 反序列化不可信数据，都可能导致远程代码执行。评审关注 JSON 库配置与自定义 readObject。修复：禁用 autoType、使用白名单 PolymorphicTypeValidator、避免反序列化外部数据。",
+    "code": "// 危险配置（Fastjson 历史漏洞面）\nJSON.parseObject(input, Feature.SupportAutoType);\n\n// 建议：升级版本 + 关闭 autoType + safeMode"
+  },
+  {
+    "source": "seed-java",
+    "kind": "vulnerability",
+    "language": "java",
+    "title": "SimpleDateFormat 静态共享导致线程安全问题",
+    "content": "SimpleDateFormat 非线程安全，作为 static 字段被多线程共享时会产生错误日期甚至 NumberFormatException。评审中看到 static SimpleDateFormat 即应标记。修复：改用线程安全的 DateTimeFormatter（java.time），或 ThreadLocal 包装。",
+    "code": "// 错误\nprivate static final SimpleDateFormat FMT = new SimpleDateFormat(\"yyyy-MM-dd\");\n\n// 正确\nprivate static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern(\"yyyy-MM-dd\");"
+  },
+  {
+    "source": "seed-java",
+    "kind": "best_practice",
+    "language": "java",
+    "title": "循环内逐条查询（N+1）",
+    "content": "在循环中对每个元素发起数据库/远程调用（findById、HTTP 请求等），数据量大时会线性放大延迟与连接占用。评审要点：循环体内的 DAO/Repository/Client 调用。修复：批量查询（IN 查询 / batchGet）后在内存关联，或分页拉平。",
+    "code": "// 错误\nfor (Order o : orders) {\n    User u = userDao.findById(o.getUserId());\n}\n\n// 正确\nMap<Long, User> users = userDao.findByIds(orders.stream().map(Order::getUserId).toList());"
+  },
+  {
+    "source": "seed-java",
+    "kind": "best_practice",
+    "language": "java",
+    "title": "空 catch 吞异常",
+    "content": "catch 块为空或仅注释「忽略」，会掩盖故障、让问题在生产环境以最坏方式爆发。评审原则：禁止空 catch；确实无操作空间时至少要记录 warn 日志并说明原因。对外接口不应返回裸 null 掩盖失败。",
+    "code": "// 错误\ncatch (Exception e) { /* 忽略 */ }\n\n// 正确\ncatch (Exception e) {\n    log.error(\"export orders failed, userId={}\", userId, e);\n    throw new BizException(ErrorCode.EXPORT_FAILED, e);\n}"
+  },
+  {
+    "source": "seed-java",
+    "kind": "best_practice",
+    "language": "java",
+    "title": "资源未关闭：Connection / Stream / Reader",
+    "content": "JDBC Connection、IO 流等资源未在 finally 或 try-with-resources 中关闭，异常路径下会泄漏句柄与连接池配额。评审要点：borrow/getConnection/new FileInputStream 之后是否存在确定的关闭路径。修复：try-with-resources 或统一在 finally 关闭。",
+    "code": "// 正确：try-with-resources\ntry (Connection conn = pool.borrow();\n     PreparedStatement ps = conn.prepareStatement(sql)) {\n    ...\n}"
+  },
+  {
+    "source": "seed-java",
+    "kind": "best_practice",
+    "language": "java",
+    "title": "无界集合与缓存导致 OOM",
+    "content": "静态 Map 只增不删、缓存没有容量上限与过期策略，内存会随时间单调增长直至 OOM。评审关注 static 集合字段的写入/清理路径是否成对出现。修复：使用有界缓存（Caffeine maximumSize + expireAfterWrite）或定期清理。",
+    "code": "// 错误\nprivate static final Map<String, Object> CACHE = new HashMap<>(); // 只 put 不 evict\n\n// 正确\nCache<String, Object> cache = Caffeine.newBuilder()\n    .maximumSize(10_000)\n    .expireAfterWrite(Duration.ofMinutes(30))\n    .build();"
+  },
+  {
+    "source": "seed-java",
+    "kind": "best_practice",
+    "language": "java",
+    "title": "循环内字符串 += 拼接",
+    "content": "循环中使用 += 拼接字符串每次都会复制整个串，O(n^2) 复杂度。数据量超过数百次循环即应改为 StringBuilder。",
+    "code": "// 错误\nfor (String s : list) result += s;\n\n// 正确\nStringBuilder sb = new StringBuilder();\nfor (String s : list) sb.append(s);"
+  },
+  {
+    "source": "seed-java",
+    "kind": "best_practice",
+    "language": "java",
+    "title": "并发容器选型：HashMap 多线程写入",
+    "content": "多线程写 HashMap 会导致死循环（JDK7）或数据丢失；需要并发读写时应使用 ConcurrentHashMap。评审关注 static 集合在请求线程/线程池中的共享写路径。",
+    "code": "// 错误\nstatic Map<String, Session> SESSIONS = new HashMap<>(); // 多线程写\n\n// 正确\nstatic Map<String, Session> SESSIONS = new ConcurrentHashMap<>();"
+  },
+  {
+    "source": "seed-java",
+    "kind": "best_practice",
+    "language": "java",
+    "title": "equals 与包装类型比较陷阱",
+    "content": "用 == 比较 Integer/Long 包装类型只在 -128~127 缓存区间内「碰巧正确」；可能为 null 的对象调用 equals 会 NPE。评审要点：常量/确定非空的一侧放 equals 左边；数值比较用 Objects.equals 或先拆箱。",
+    "code": "// 错误\nif (status == 1) // status 为 Integer 时语义错误\nif (user.getType().equals(ADMIN)) // user.getType() 可能为 null\n\n// 正确\nif (Objects.equals(status, 1))\nif (ADMIN.equals(user.getType()))"
+  },
+  {
+    "source": "seed-java",
+    "kind": "review_example",
+    "language": "java",
+    "title": "评审样例：接口返回裸 null",
+    "content": "历史评审意见：方法在异常分支返回裸 null，调用方无法区分「无数据」与「失败」，且极易引发下游 NPE。建议返回 Optional 或明确的空集合，并抛出业务异常表达失败。此类意见适用于所有查询类公共方法。",
+    "code": "// 被评审代码\ncatch (Exception e) { }\nreturn null;\n\n// 评审期望：明确语义，空集合或 Optional，异常向上传递业务错误码"
+  },
+  {
+    "source": "seed-java",
+    "kind": "review_example",
+    "language": "java",
+    "title": "评审样例：缺少边界条件的单元测试",
+    "content": "历史评审意见：导出/分页类方法只测试了正常路径，缺少空列表、单页边界、超大页、非法入参的用例。建议针对输入域枚举边界值补测：空集合、1 条、页大小整除与不整除、负数与越界页码。",
+    "code": "// 建议补充的测试骨架（JUnit5）\n@ParameterizedTest\n@ValueSource(ints = {0, 1, PAGE_SIZE, PAGE_SIZE + 1})\nvoid exportOrders_boundaries(int size) {\n    var result = service.exportOrders(uid, date);\n    assertThat(result).hasSize(Math.min(size, LIMIT));\n}"
+  }
+]

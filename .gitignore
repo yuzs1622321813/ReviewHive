@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+.pytest_cache/
+.coverage
+
+# 运行期数据与进程
+data/*.db
+data/downloads/
+data/uploads/
+.run/
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
+
+# 配置覆盖（可放本地端口/路径改动）
+config/settings.local.yaml

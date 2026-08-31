@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ReviewHive · 本地多 Agent 代码评审</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo">H</span>
+      <div>
+        <h1>ReviewHive</h1>
+        <p>本地模型驱动的多 Agent 代码评审平台</p>
+      </div>
+    </div>
+    <div id="health" class="health" title="依赖服务状态"></div>
+  </header>
+
+  <main>
+    <section class="panel input-panel">
+      <div class="tabs">
+        <button class="tab active" data-tab="code">代码</button>
+        <button class="tab" data-tab="diff">Diff</button>
+      </div>
+      <textarea id="input-code" placeholder="粘贴待评审的代码（默认 Java）…"></textarea>
+      <textarea id="input-diff" placeholder="粘贴 unified diff…" hidden></textarea>
+
+      <div class="field-row">
+        <input id="filename" type="text" placeholder="文件名（可选，如 UserService.java）" />
+        <input id="language" type="text" placeholder="语言（可选，默认 java）" />
+      </div>
+
+      <div class="field-row">
+        <label class="file-label">
+          <input id="images" type="file" accept="image/*" multiple hidden />
+          <span class="btn ghost">+ 附加架构图/截图（VL 解读）</span>
+        </label>
+        <div id="image-names" class="image-names"></div>
+      </div>
+
+      <div class="actions">
+        <button id="submit" class="btn primary">开始评审</button>
+        <button id="load-sample" class="btn ghost">载入示例代码</button>
+      </div>
+    </section>
+
+    <section class="panel output-panel">
+      <div id="timeline" class="timeline">
+        <div class="empty">提交代码后，这里会实时展示主 Agent 的调度与各子 Agent 的工作过程。</div>
+      </div>
+      <div id="report" class="report" hidden></div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

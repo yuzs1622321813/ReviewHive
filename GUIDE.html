@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ReviewHive · 使用说明与实现原理</title>
+<style>
+  :root {
+    --ink: #1f2937; --muted: #6b7280; --line: #e5e7eb;
+    --blue: #2563eb; --blue-soft: #eff6ff;
+    --amber: #d97706; --amber-soft: #fffbeb;
+    --green: #059669; --green-soft: #ecfdf5;
+    --red: #dc2626;
+    --bg: #ffffff; --code-bg: #f6f8fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    line-height: 1.75; font-size: 15px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
+  header.hero {
+    background: linear-gradient(135deg, #1e3a8a, #2563eb 60%, #7c3aed);
+    color: #fff; border-radius: 16px; padding: 36px 40px; margin-bottom: 40px;
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 30px; }
+  header.hero p { margin: 4px 0; opacity: .92; }
+  header.hero .badges { margin-top: 14px; }
+  header.hero .badge {
+    display: inline-block; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.35);
+    padding: 2px 12px; border-radius: 999px; font-size: 13px; margin-right: 8px;
+  }
+  h2 {
+    font-size: 22px; margin: 48px 0 16px; padding-left: 12px;
+    border-left: 5px solid var(--blue);
+  }
+  h3 { font-size: 17px; margin: 28px 0 10px; }
+  p { margin: 8px 0; }
+  code, pre {
+    font-family: "JetBrains Mono", Menlo, Consolas, monospace; font-size: 13.5px;
+  }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 5px; }
+  pre {
+    background: #0f172a; color: #e2e8f0; padding: 16px 18px; border-radius: 10px;
+    overflow-x: auto; line-height: 1.6;
+  }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: #f9fafb; }
+  .card {
+    border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; margin: 14px 0;
+    background: #fcfcfd;
+  }
+  .tip { border-left: 4px solid var(--green); background: var(--green-soft); }
+  .warn { border-left: 4px solid var(--amber); background: var(--amber-soft); }
+  .key { border-left: 4px solid var(--blue); background: var(--blue-soft); }
+  .figure { margin: 18px 0; text-align: center; }
+  .figure svg { max-width: 100%; height: auto; }
+  .figure .caption { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .step { display: flex; gap: 14px; margin: 12px 0; }
+  .step .no {
+    flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--blue); color: #fff;
+    display: grid; place-items: center; font-weight: 700; margin-top: 2px;
+  }
+  .toc { columns: 2; column-gap: 32px; font-size: 14px; }
+  .toc a { color: var(--blue); text-decoration: none; }
+  .toc li { margin: 4px 0; break-inside: avoid; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 60px; text-align: center; }
+  .qa-q { font-weight: 700; margin-top: 14px; }
+  .qa-a { color: #374151; margin: 2px 0 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>ReviewHive</h1>
+  <p>完全运行于本地模型的代码评审多 Agent 协作平台</p>
+  <p style="font-size:14px">主 Agent 负责规划调度，多个专家子 Agent 并行评审，评审知识来自「向量 + 关键词」混合检索的知识库。全程不调用任何云端 API。</p>
+  <div class="badges">
+    <span class="badge">Python 3.10+</span>
+    <span class="badge">Qdrant + Elasticsearch</span>
+    <span class="badge">llama.cpp 本地推理</span>
+    <span class="badge">FastAPI + SSE</span>
+  </div>
+</header>
+
+<nav class="card">
+  <strong>目录</strong>
+  <ul class="toc">
+    <li><a href="#s1">1. 它能做什么</a></li>
+    <li><a href="#s2">2. 快速开始</a></li>
+    <li><a href="#s3">3. 页面怎么用</a></li>
+    <li><a href="#s4">4. 工作原理</a></li>
+    <li><a href="#s5">5. 实现细节</a></li>
+    <li><a href="#s6">6. 知识库与数据</a></li>
+    <li><a href="#s7">7. 常见问题</a></li>
+  </ul>
+</nav>
+
+<!-- ================================================================ -->
+<h2 id="s1">1. 它能做什么</h2>
+<p>把一段代码（或 diff、架构图）交给它，它会像一支评审小组一样工作：</p>
+<ul>
+  <li><strong>主 Agent</strong> 先读代码，决定这次要派哪些专家、重点看什么；</li>
+  <li><strong>安全 / 性能 / 规范 / 测试</strong> 四位专家并行审查，需要查资料时自己调用技能（搜知识库、读文件、正则搜索）；</li>
+  <li>最后<strong>主 Agent 汇总</strong>：合并重复项、校准严重度、输出总结。</li>
+</ul>
+
+<table>
+  <tr><th>角色</th><th>模型</th><th>运行方式</th></tr>
+  <tr><td>主 LLM（规划 / 评审 / 汇总）</td><td>Qwen3.6-35B-A3B（MoE）</td><td>llama-server，端口 8080</td></tr>
+  <tr><td>多模态（读架构图，可选）</td><td>Qwen3-VL-8B-Instruct</td><td>llama-server，端口 8082</td></tr>
+  <tr><td>向量嵌入</td><td>BAAI/bge-m3（可换 Qwen3-Embedding）</td><td>Python 进程内加载</td></tr>
+  <tr><td>结果重排</td><td>BAAI/bge-reranker-v2-m3</td><td>Python 进程内加载</td></tr>
+</table>
+
+<!-- ================================================================ -->
+<h2 id="s2">2. 快速开始</h2>
+<p>前置：Docker、Python 3.10+、llama.cpp（<code>llama-server</code>）、本地模型文件。</p>
+
+<pre><code>cd reviewhive
+
+make infra          # ① 启动 Qdrant + Elasticsearch（docker compose）
+make models-start   # ② 启动本地模型（8080 主模型 / 8082 多模态）
+make install        # ③ 安装 Python 依赖
+make ingest         # ④ 把种子知识库写入 Qdrant + ES
+make serve          # ⑤ 启动，打开 http://localhost:9100</code></pre>
+
+<div class="card tip">
+  <strong>已经在跑 llama-server？</strong>第 ② 步可跳过——只要主模型监听在 <code>127.0.0.1:8080</code> 即可。用 <code>reviewhive health</code> 一键检查所有依赖是否就绪。
+</div>
+
+<!-- ================================================================ -->
+<h2 id="s3">3. 页面怎么用</h2>
+<div class="step"><div class="no">1</div><div>打开页面，看右上角的<strong>健康状态灯</strong>：LLM / Qdrant / ES 全绿表示就绪（VL 灰着没关系，不传图就用不到）。</div></div>
+<div class="step"><div class="no">2</div><div>左侧填入材料：粘贴代码或 diff；也可以点「附加架构图」传截图（走多模态）。新手直接点 <strong>载入示例代码</strong>。</div></div>
+<div class="step"><div class="no">3</div><div>点 <strong>开始评审</strong>。右侧时间线会实时直播：主 Agent 的调度计划 → 每个专家的技能调用 → 各自的产出。</div></div>
+<div class="step"><div class="no">4</div><div>几分钟后报告出现：顶部是总结与严重度统计，下面每条发现都带行号、证据代码、修改建议和引用的知识库编号。</div></div>
+
+<div class="card tip">
+  <strong>想扩充知识库：</strong><code>reviewhive download-data</code> 下载微软 CodeReviewer / CodeXGLZ 开源数据集，再 <code>reviewhive ingest</code> 入库即可。
+</div>
+
+<!-- ================================================================ -->
+<h2 id="s4">4. 工作原理</h2>
+
+<h3>4.1 总体架构</h3>
+<div class="figure">
+<svg viewBox="0 0 960 620" xmlns="http://www.w3.org/2000/svg" font-family="PingFang SC, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- 接入层 -->
+  <rect x="40" y="24" width="190" height="54" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="135" y="46" text-anchor="middle" font-size="14" font-weight="bold" fill="#1e3a8a">浏览器 Web UI</text>
+  <text x="135" y="64" text-anchor="middle" font-size="11" fill="#3b82f6">提交代码 / 看实时过程</text>
+
+  <rect x="40" y="112" width="190" height="54" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="135" y="134" text-anchor="middle" font-size="14" font-weight="bold" fill="#1e3a8a">FastAPI 服务</text>
+  <text x="135" y="152" text-anchor="middle" font-size="11" fill="#3b82f6">REST + SSE 事件流</text>
+
+  <line x1="135" y1="78" x2="135" y2="110" stroke="#64748b" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="200" width="190" height="46" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="135" y="228" text-anchor="middle" font-size="12.5" fill="#334155">SQLite · 评审会话存档</text>
+  <line x1="135" y1="166" x2="135" y2="198" stroke="#64748b" marker-end="url(#arrow)"/>
+
+  <!-- 编排层 -->
+  <rect x="270" y="24" width="650" height="222" rx="14" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="292" y="50" font-size="14" font-weight="bold" fill="#92400e">编排层 · 评审流水线（主干固定，步骤内动态）</text>
+
+  <g font-size="12.5" text-anchor="middle">
+    <rect x="292" y="68" width="106" height="44" rx="9" fill="#fff" stroke="#f59e0b"/>
+    <text x="345" y="86" font-weight="bold" fill="#92400e">受理</text>
+    <text x="345" y="102" font-size="10.5" fill="#b45309">解析代码/附件</text>
+
+    <rect x="420" y="68" width="106" height="44" rx="9" fill="#fff" stroke="#f59e0b"/>
+    <text x="473" y="86" font-weight="bold" fill="#92400e">规划</text>
+    <text x="473" y="102" font-size="10.5" fill="#b45309">主 Agent 定计划</text>
+
+    <rect x="548" y="68" width="106" height="44" rx="9" fill="#fff" stroke="#f59e0b"/>
+    <text x="601" y="86" font-weight="bold" fill="#92400e">检索</text>
+    <text x="601" y="102" font-size="10.5" fill="#b45309">知识库预取证据</text>
+
+    <rect x="676" y="68" width="106" height="44" rx="9" fill="#fff" stroke="#f59e0b"/>
+    <text x="729" y="86" font-weight="bold" fill="#92400e">并行评审</text>
+    <text x="729" y="102" font-size="10.5" fill="#b45309">子 Agent × N</text>
+
+    <rect x="804" y="68" width="106" height="44" rx="9" fill="#fff" stroke="#f59e0b"/>
+    <text x="857" y="86" font-weight="bold" fill="#92400e">汇总</text>
+    <text x="857" y="102" font-size="10.5" fill="#b45309">去重·定级·总结</text>
+  </g>
+  <g stroke="#d97706" stroke-width="1.6">
+    <line x1="398" y1="90" x2="418" y2="90" marker-end="url(#arrow)"/>
+    <line x1="526" y1="90" x2="546" y2="90" marker-end="url(#arrow)"/>
+    <line x1="654" y1="90" x2="674" y2="90" marker-end="url(#arrow)"/>
+    <line x1="782" y1="90" x2="802" y2="90" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- 子 Agent -->
+  <text x="292" y="142" font-size="12.5" font-weight="bold" fill="#92400e">子 Agent（按计划派出，技能循环驱动）</text>
+  <g font-size="12" text-anchor="middle">
+    <rect x="292" y="154" width="112" height="40" rx="9" fill="#fff" stroke="#fb923c"/>
+    <text x="348" y="178" fill="#9a3412">🛡 安全专家</text>
+    <rect x="416" y="154" width="112" height="40" rx="9" fill="#fff" stroke="#fb923c"/>
+    <text x="472" y="178" fill="#9a3412">⚡ 性能专家</text>
+    <rect x="540" y="154" width="112" height="40" rx="9" fill="#fff" stroke="#fb923c"/>
+    <text x="596" y="178" fill="#9a3412">📏 规范专家</text>
+    <rect x="664" y="154" width="112" height="40" rx="9" fill="#fff" stroke="#fb923c"/>
+    <text x="720" y="178" fill="#9a3412">🧪 测试专家</text>
+    <rect x="788" y="154" width="122" height="40" rx="9" fill="#fff" stroke="#fb923c" stroke-dasharray="5 4"/>
+    <text x="849" y="178" fill="#9a3412">🖼 多模态（可选）</text>
+  </g>
+  <text x="292" y="222" font-size="11.5" fill="#b45309">每位专家自带技能：search_kb 查知识库 · read_file / grep_code 查代码 · analyze_diff 看变更 · read_image 看图</text>
+
+  <line x1="230" y1="139" x2="268" y2="139" stroke="#64748b" marker-end="url(#arrow)"/>
+
+  <!-- 能力层 -->
+  <rect x="40" y="290" width="430" height="140" rx="14" fill="#ecfdf5" stroke="#6ee7b7"/>
+  <text x="60" y="316" font-size="14" font-weight="bold" fill="#065f46">混合检索（RAG）</text>
+  <g font-size="12" text-anchor="middle">
+    <rect x="60" y="330" width="120" height="38" rx="8" fill="#fff" stroke="#34d399"/>
+    <text x="120" y="353" fill="#047857">Qdrant 向量库</text>
+    <rect x="192" y="330" width="120" height="38" rx="8" fill="#fff" stroke="#34d399"/>
+    <text x="252" y="353" fill="#047857">ES BM25 索引</text>
+    <rect x="324" y="330" width="126" height="38" rx="8" fill="#fff" stroke="#34d399"/>
+    <text x="387" y="353" fill="#047857">RRF 融合 + 重排</text>
+  </g>
+  <text x="60" y="400" font-size="11.5" fill="#047857">嵌入：bge-m3（可插拔）　重排：bge-reranker-v2-m3　语义召回 + 精确召回互补</text>
+
+  <rect x="490" y="290" width="430" height="140" rx="14" fill="#f5f3ff" stroke="#c4b5fd"/>
+  <text x="510" y="316" font-size="14" font-weight="bold" fill="#5b21b6">模型服务（全部在本机）</text>
+  <g font-size="12" text-anchor="middle">
+    <rect x="510" y="330" width="126" height="38" rx="8" fill="#fff" stroke="#a78bfa"/>
+    <text x="573" y="346" fill="#6d28d9">llama-server</text>
+    <text x="573" y="361" font-size="10.5" fill="#7c3aed">:8080 主 LLM</text>
+    <rect x="648" y="330" width="126" height="38" rx="8" fill="#fff" stroke="#a78bfa"/>
+    <text x="711" y="346" fill="#6d28d9">llama-server</text>
+    <text x="711" y="361" font-size="10.5" fill="#7c3aed">:8082 多模态</text>
+    <rect x="786" y="330" width="118" height="38" rx="8" fill="#fff" stroke="#a78bfa"/>
+    <text x="845" y="346" fill="#6d28d9">进程内加载</text>
+    <text x="845" y="361" font-size="10.5" fill="#7c3aed">嵌入 + 重排</text>
+  </g>
+  <text x="510" y="400" font-size="11.5" fill="#6d28d9">OpenAI 兼容接口 · 无需云端账号 · 断网可用</text>
+
+  <line x1="595" y1="246" x2="400" y2="288" stroke="#64748b" marker-end="url(#arrow)"/>
+  <line x1="595" y1="246" x2="700" y2="288" stroke="#64748b" marker-end="url(#arrow)"/>
+
+  <!-- 数据 -->
+  <rect x="40" y="470" width="880" height="120" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="60" y="496" font-size="14" font-weight="bold" fill="#334155">知识来源（入库一次，检索多次）</text>
+  <g font-size="12" text-anchor="middle">
+    <rect x="60" y="512" width="250" height="52" rx="8" fill="#fff" stroke="#94a3b8"/>
+    <text x="185" y="533" fill="#334155">种子知识库（15 条）</text>
+    <text x="185" y="551" font-size="10.5" fill="#64748b">注入/凭据/并发等高频问题 · 开箱即用</text>
+    <rect x="330" y="512" width="270" height="52" rx="8" fill="#fff" stroke="#94a3b8"/>
+    <text x="465" y="533" fill="#334155">CodeReviewer（微软）</text>
+    <text x="465" y="551" font-size="10.5" fill="#64748b">真实 PR 评审意见 · reviewhive download-data</text>
+    <rect x="620" y="512" width="280" height="52" rx="8" fill="#fff" stroke="#94a3b8"/>
+    <text x="760" y="533" fill="#334155">CodeXGLZ 缺陷数据</text>
+    <text x="760" y="551" font-size="10.5" fill="#64748b">函数级缺陷样例 · 充实漏洞模式</text>
+  </g>
+  <line x1="255" y1="430" x2="255" y2="468" stroke="#64748b" marker-end="url(#arrow)"/>
+</svg>
+<div class="caption">图 1 · 总体架构：接入层 → 编排层 → 能力层</div>
+</div>
+
+<h3>4.2 一次评审是怎么跑起来的</h3>
+<p>主干是固定的五个阶段（保证一定能出报告），动态的部分发生在阶段内部：</p>
+<table>
+  <tr><th>阶段</th><th>谁在做</th><th>动态还是固定</th></tr>
+  <tr><td>① 受理</td><td>流水线</td><td>固定：解析代码、diff、图片，建立工作区</td></tr>
+  <tr><td>② 规划</td><td>主 Agent</td><td><strong>动态</strong>：决定派哪些专家、本次关注点是什么</td></tr>
+  <tr><td>③ 检索</td><td>RAG</td><td>固定：按规划出的关注点预取知识库证据</td></tr>
+  <tr><td>④ 并行评审</td><td>子 Agent</td><td><strong>动态</strong>：每位专家自主决定是否、何时调用技能</td></tr>
+  <tr><td>⑤ 汇总</td><td>主 Agent</td><td><strong>动态</strong>：合并重复项、校准严重度、写总结</td></tr>
+</table>
+
+<h3>4.3 子 Agent 的「技能循环」</h3>
+<p>每位专家拿到任务后，按固定协议工作：每一轮只输出一个 JSON——要么「我要用技能」，要么「我审完了」。程序负责执行技能并把结果喂回去，直到专家给出结论。</p>
+<div class="figure">
+<svg viewBox="0 0 960 330" xmlns="http://www.w3.org/2000/svg" font-family="PingFang SC, sans-serif">
+  <defs>
+    <marker id="arrow2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#64748b"/>
+    </marker>
+  </defs>
+  <rect x="30" y="120" width="150" height="60" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="105" y="145" text-anchor="middle" font-size="13" font-weight="bold" fill="#1e3a8a">准备任务</text>
+  <text x="105" y="163" text-anchor="middle" font-size="11" fill="#3b82f6">角色提示词 + 代码 + 证据</text>
+
+  <rect x="230" y="120" width="160" height="60" rx="10" fill="#f5f3ff" stroke="#c4b5fd"/>
+  <text x="310" y="145" text-anchor="middle" font-size="13" font-weight="bold" fill="#5b21b6">模型输出 JSON</text>
+  <text x="310" y="163" text-anchor="middle" font-size="11" fill="#7c3aed">{"action": "skill" | "final"}</text>
+
+  <polygon points="490,90 570,150 490,210 410,150" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="490" y="146" text-anchor="middle" font-size="13" font-weight="bold" fill="#92400e">action</text>
+  <text x="490" y="164" text-anchor="middle" font-size="12" fill="#b45309">是什么？</text>
+
+  <rect x="630" y="40" width="150" height="56" rx="10" fill="#ecfdf5" stroke="#6ee7b7"/>
+  <text x="705" y="63" text-anchor="middle" font-size="13" font-weight="bold" fill="#065f46">执行技能</text>
+  <text x="705" y="81" text-anchor="middle" font-size="11" fill="#047857">search_kb / grep_code…</text>
+
+  <rect x="630" y="210" width="150" height="56" rx="10" fill="#fef2f2" stroke="#fca5a5"/>
+  <text x="705" y="233" text-anchor="middle" font-size="13" font-weight="bold" fill="#991b1b">解析 findings</text>
+  <text x="705" y="251" text-anchor="middle" font-size="11" fill="#b91c1c">结构化问题清单</text>
+
+  <rect x="840" y="210" width="100" height="56" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="890" y="242" text-anchor="middle" font-size="13" font-weight="bold" fill="#334155">完成</text>
+
+  <line x1="180" y1="150" x2="228" y2="150" stroke="#64748b" marker-end="url(#arrow2)"/>
+  <line x1="390" y1="150" x2="408" y2="150" stroke="#64748b" marker-end="url(#arrow2)"/>
+  <line x1="548" y1="120" x2="628" y2="72" stroke="#64748b" marker-end="url(#arrow2)"/>
+  <text x="560" y="88" font-size="11.5" fill="#059669">skill</text>
+  <line x1="548" y1="182" x2="628" y2="232" stroke="#64748b" marker-end="url(#arrow2)"/>
+  <text x="560" y="222" font-size="11.5" fill="#dc2626">final</text>
+  <path d="M 705 96 C 705 140, 400 220, 310 182" fill="none" stroke="#64748b" stroke-dasharray="5 4" marker-end="url(#arrow2)"/>
+  <text x="470" y="245" font-size="11.5" fill="#64748b">技能结果追加到对话，继续下一轮</text>
+  <line x1="780" y1="238" x2="838" y2="238" stroke="#64748b" marker-end="url(#arrow2)"/>
+</svg>
+<div class="caption">图 2 · 技能循环：每位专家最多调用 4 轮技能，防止打转</div>
+</div>
+
+<h3>4.4 知识库是怎么帮忙的（混合检索）</h3>
+<p>评审不能只靠模型「凭印象说」。系统维护了一个评审知识库，检索时走两条路再合并：</p>
+<ul>
+  <li><strong>向量路（Qdrant）</strong>：把问题变成向量找「意思相近」的条目——适合模糊描述，比如「线程不安全」；</li>
+  <li><strong>关键词路（Elasticsearch）</strong>：按词精确匹配——适合具体符号，比如 <code>SimpleDateFormat</code>；</li>
+  <li>两路结果用 <strong>RRF</strong> 按名次融合（不需要给两边的分数做标定），再由 <strong>重排模型</strong> 逐条比对查询与候选，挑出最相关的几条交给 Agent。</li>
+</ul>
+<div class="figure">
+<svg viewBox="0 0 960 250" xmlns="http://www.w3.org/2000/svg" font-family="PingFang SC, sans-serif">
+  <defs>
+    <marker id="arrow3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#64748b"/>
+    </marker>
+  </defs>
+  <rect x="20" y="95" width="130" height="52" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="85" y="117" text-anchor="middle" font-size="13" font-weight="bold" fill="#1e3a8a">检索问题</text>
+  <text x="85" y="135" text-anchor="middle" font-size="11" fill="#3b82f6">关注点 + 文件名</text>
+
+  <rect x="210" y="35" width="190" height="52" rx="10" fill="#ecfdf5" stroke="#6ee7b7"/>
+  <text x="305" y="57" text-anchor="middle" font-size="13" font-weight="bold" fill="#065f46">Qdrant 语义召回</text>
+  <text x="305" y="75" text-anchor="middle" font-size="11" fill="#047857">bge-m3 嵌入 · top 20</text>
+
+  <rect x="210" y="155" width="190" height="52" rx="10" fill="#ecfdf5" stroke="#6ee7b7"/>
+  <text x="305" y="177" text-anchor="middle" font-size="13" font-weight="bold" fill="#065f46">ES 关键词召回</text>
+  <text x="305" y="195" text-anchor="middle" font-size="11" fill="#047857">BM25 · top 20</text>
+
+  <rect x="460" y="95" width="150" height="52" rx="10" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="535" y="117" text-anchor="middle" font-size="13" font-weight="bold" fill="#92400e">RRF 融合</text>
+  <text x="535" y="135" text-anchor="middle" font-size="11" fill="#b45309">按名次合并 · 候选 30</text>
+
+  <rect x="670" y="95" width="150" height="52" rx="10" fill="#fef2f2" stroke="#fca5a5"/>
+  <text x="745" y="117" text-anchor="middle" font-size="13" font-weight="bold" fill="#991b1b">重排精挑</text>
+  <text x="745" y="135" text-anchor="middle" font-size="11" fill="#b91c1c">bge-reranker-v2-m3</text>
+
+  <rect x="860" y="95" width="86" height="52" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="903" y="117" text-anchor="middle" font-size="13" font-weight="bold" fill="#334155">top 8</text>
+  <text x="903" y="135" text-anchor="middle" font-size="11" fill="#64748b">交给 Agent</text>
+
+  <line x1="150" y1="110" x2="208" y2="66" stroke="#64748b" marker-end="url(#arrow3)"/>
+  <line x1="150" y1="132" x2="208" y2="176" stroke="#64748b" marker-end="url(#arrow3)"/>
+  <line x1="400" y1="61" x2="458" y2="110" stroke="#64748b" marker-end="url(#arrow3)"/>
+  <line x1="400" y1="181" x2="458" y2="132" stroke="#64748b" marker-end="url(#arrow3)"/>
+  <line x1="610" y1="121" x2="668" y2="121" stroke="#64748b" marker-end="url(#arrow3)"/>
+  <line x1="820" y1="121" x2="858" y2="121" stroke="#64748b" marker-end="url(#arrow3)"/>
+</svg>
+<div class="caption">图 3 · 混合检索管线：语义与精确互补，重排兜底质量</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="s5">5. 实现细节</h2>
+
+<h3>5.1 目录结构</h3>
+<pre><code>reviewhive/
+├── config/settings.yaml        # 全部配置：端口、模型路径、检索参数
+├── scripts/start_models.sh     # 一键启停本地模型服务
+├── docker-compose.yml          # Qdrant + Elasticsearch
+├── data/
+│   ├── corpus/seed_java.json   # 种子知识库（15 条高质量评审知识）
+│   └── samples/                # 演示用示例代码
+└── reviewhive/                     # Python 包
+    ├── config.py               # 配置加载（支持 local 覆盖与环境变量）
+    ├── models/                 # 模型客户端
+    │   ├── llm.py              #   主 LLM（OpenAI 兼容）+ 稳健 JSON 提取
+    │   ├── embedding.py        #   嵌入：bge-m3 默认，可切外部端点
+    │   ├── reranker.py         #   重排：bge-reranker-v2-m3
+    │   └── vision.py           #   多模态：Qwen3-VL
+    ├── rag/                    # 可插拔切片 / Qdrant / ES / 混合检索 / 文档加载 / 入库
+    ├── skills/                 # 技能注册表 + 5 个内置技能
+    ├── agents/                 # 子 Agent 基类 / 角色配置 / 主 Agent 编排
+    ├── core/                   # 数据结构 / 流水线 / SQLite 会话存储
+    ├── api/                    # FastAPI + SSE + 静态前端（零依赖原生 JS）
+    ├── data/datasets.py        # 开源数据集下载转换
+    └── cli.py                  # reviewhive 命令行</code></pre>
+
+<h3>5.2 核心模块职责</h3>
+<table>
+  <tr><th>模块</th><th>职责</th><th>关键点</th></tr>
+  <tr><td><code>core/pipeline.py</code></td><td>评审主干流水线</td><td>五阶段固定推进；依赖惰性加载；任何一步失败都能降级</td></tr>
+  <tr><td><code>agents/orchestrator.py</code></td><td>主 Agent：规划与汇总</td><td>规划失败自动回退默认计划；汇总失败原样输出</td></tr>
+  <tr><td><code>agents/base.py</code></td><td>子 Agent：技能循环</td><td>JSON 协议 + 最多 4 轮技能调用 + findings 结构化校验</td></tr>
+  <tr><td><code>skills/registry.py</code></td><td>技能注册与自省</td><td>技能带 JSON Schema，可被提示词渲染、可被 API 枚举</td></tr>
+  <tr><td><code>rag/chunking.py</code></td><td>可插拔切片体系</td><td>策略注册表（heading / fixed_window），配置切换，新策略继承即用</td></tr>
+  <tr><td><code>rag/retriever.py</code></td><td>混合检索</td><td>RRF 融合；单路故障只降级不报错</td></tr>
+  <tr><td><code>api/routes.py</code></td><td>HTTP 接口</td><td>后台任务执行评审，SSE 推送过程事件</td></tr>
+  <tr><td><code>core/store.py</code></td><td>会话存储</td><td>SQLite 标准库实现，报告可回放</td></tr>
+  <tr><td><code>observability.py</code></td><td>链路追踪（可选）</td><td>OTel + OpenInference → Phoenix；关闭即零开销</td></tr>
+</table>
+
+<h3>5.3 关键设计决策（为什么这么做）</h3>
+<p class="qa-q">Q：为什么用「混合编排」，而不是让主 Agent 完全自主规划？</p>
+<p class="qa-a">本地量化模型的长程规划不稳定。主干固定保证「一定能出报告」，把自由度收敛到规划、技能调用、汇总三个点上——既有智能度，又可控、可复现、好调试。</p>
+
+<p class="qa-q">Q：为什么自造 JSON 协议，不用模型原生的 function calling？</p>
+<p class="qa-a">llama.cpp 的 tool calling 对不同模型/模板支持不一，量化后更容易输出坏格式。JSON 协议只依赖模型「输出合法 JSON」的能力，配合稳健的提取器（支持代码围栏、嵌入文本中的平衡括号扫描），对本地模型最可靠，也方便日志排查。</p>
+
+<p class="qa-q">Q：嵌入模型为什么默认是 bge-m3？</p>
+<p class="qa-a">接口做了可插拔：默认进程内加载本地已有的 bge-m3（多语言、1024 维、开箱即用）；下载 Qwen3-Embedding-8B 的 GGUF 后，改两行配置切到独立嵌入端点即可，检索层无需改动。</p>
+
+<p class="qa-q">Q：检索为什么非要两路？</p>
+<p class="qa-a">向量擅长「意思相近」，但对 <code>SimpleDateFormat</code> 这类精确符号召回弱；BM25 正好互补。RRF 只用名次融合，不需要给两边分数做标定，工程上最简单也最稳。</p>
+
+<p class="qa-q">Q：某个组件挂了会怎样？</p>
+<p class="qa-a">逐级降级：ES 挂了只剩向量路；检索全挂了 Agent 仍能凭模型能力评审；单个子 Agent 失败不影响其他专家；主模型不可用时也能返回带状态说明的报告。所有评审会话都落 SQLite，可回放。</p>
+
+<p class="qa-q">Q：实时过程是怎么推到页面的？</p>
+<p class="qa-a">评审在后台任务里跑，每个关键动作（阶段切换、技能调用、专家完成）写入会话事件队列，前端用 SSE（EventSource）订阅，逐条渲染成时间线。</p>
+
+<p class="qa-q">Q：切片为什么做成可插拔的？</p>
+<p class="qa-a">入库语料有三类（结构化种子、数据集、官方文档），未来还会加代码库级语料，切片方式不可能一套通吃。<code>rag/chunking.py</code> 定义统一的 <code>Chunker</code> 抽象与注册表：当前提供「结构优先（按标题成块）」与「定长滑窗」两种策略，由 <code>settings.yaml</code> 一行配置切换；以后要加代码 AST 切片、语义切片，继承 <code>Chunker</code> 实现 <code>split()</code> 再注册即可，入库与检索层零改动。</p>
+
+<p class="qa-q">Q：链路追踪为什么选 Phoenix 且做成可选项？</p>
+<p class="qa-a">调试多 Agent 系统最需要「一次评审到底发生了什么」的完整回放：Phoenix 单进程本地部署（Docker 一条命令），收 OTLP trace，能看到「会话 → 阶段 → 子 Agent → 每次 LLM 调用（prompt/补全/token/延迟）」的整棵树。做成可选是坚持全本地零负担的原则：LLM 调用走 openai SDK 被 OpenInference 自动埋点，编排链路在四个收口点手动加 span；开关关闭或依赖缺失时全部退化为 no-op，评审主流程完全不受影响。</p>
+
+<!-- ================================================================ -->
+<h2 id="s6">6. 知识库与数据</h2>
+<p>知识库条目是统一的 JSON 结构，三类：<code>review_example</code>（评审样例）、<code>vulnerability</code>（漏洞模式）、<code>best_practice</code>（最佳实践）。示例：</p>
+<pre><code>{
+  "source": "seed-java",
+  "kind": "vulnerability",
+  "language": "java",
+  "title": "SQL 注入：字符串拼接构造 SQL",
+  "content": "将外部输入直接拼接进 SQL 语句会导致注入……修复：参数化查询。",
+  "code": "// 错误示例与正确写法对照"
+}</code></pre>
+<ul>
+  <li><strong>入库流程</strong>：条目 → 拼装「标题+内容+代码」→ bge-m3 向量化 → 同批写 Qdrant（语义）与 ES（全文）。</li>
+  <li><strong>官方文档语料</strong>：<code>reviewhive fetch-docs</code> 下载 OWASP 安全指南（16 篇）、阿里巴巴 Java 开发手册（p3c gitbook）、p3c 规则文档到 <code>data/docs/</code>，按目录名自动归类为 <code>vulnerability</code> / <code>best_practice</code>。</li>
+  <li><strong>切片策略</strong>：默认 <code>heading</code>（结构优先，按标题成块，单块 ≤1500 字），可在 <code>settings.yaml</code> 切换为 <code>fixed_window</code>，或按 <code>chunking.py</code> 注释三步扩展新策略。</li>
+  <li><strong>开源数据集</strong>：<code>reviewhive download-data --limit 500</code> 流式下载微软 CodeReviewer 与 CodeXGLZ 缺陷数据集并转成统一格式，再 <code>reviewhive ingest</code>。</li>
+</ul>
+
+<!-- ================================================================ -->
+<h2 id="s7">7. 常见问题</h2>
+<table>
+  <tr><th>问题</th><th>处理</th></tr>
+  <tr><td>端口被占用</td><td>改 <code>config/settings.yaml</code> 的 <code>app.port</code>（默认 9100）</td></tr>
+  <tr><td>健康检查有红灯</td><td>先跑 <code>reviewhive health</code>；模型没起就 <code>make models-start</code>，存储没起就 <code>make infra</code></td></tr>
+  <tr><td>第一次评审很慢</td><td>首次要加载 bge-m3 / 重排模型（约十几秒），之后常驻内存</td></tr>
+  <tr><td>内存吃紧</td><td>降低主模型 <code>-c</code> 上下文，或不启动多模态服务</td></tr>
+  <tr><td>想换主模型</td><td>只要是 llama-server 的 OpenAI 兼容端点，改 <code>models.llm.base_url</code> 即可</td></tr>
+</table>
+
+<footer>
+  ReviewHive · MIT License · 本文档为自包含单文件，可直接随仓库分发
+</footer>
+</div>
+</body>
+</html>

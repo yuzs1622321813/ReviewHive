@@ -1,0 +1,16 @@
+# 可观测（可选）：Arize Phoenix 链路追踪
+# 许可说明：Phoenix 采用 Elastic License 2.0，作为独立服务运行，不并入本项目 MIT 代码。
+services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: reviewhive-phoenix
+    environment:
+      - PHOENIX_WORKING_DIR=/phoenix
+    ports:
+      - "6006:6006"   # Web UI + OTLP HTTP（/v1/traces）
+    volumes:
+      - phoenix_data:/phoenix
+    restart: unless-stopped
+
+volumes:
+  phoenix_data:
