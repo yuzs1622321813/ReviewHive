@@ -45,7 +45,8 @@
 ## 项目截图
 <img width="2044" height="1013" alt="image" src="https://github.com/user-attachments/assets/f3159679-bc01-4964-9eab-6477418a98f3" />
 
-<img width="2042" height="1013" alt="image" src="https://github.com/user-attachments/assets/71ac6c5d-aae3-4f92-ae1e-d641c8cc37b4" />
+<img width="2047" height="1017" alt="image" src="https://github.com/user-attachments/assets/11d74a1a-7951-4297-96bc-d813ead7d0e2" />
+
 
 
 ## 本地模型清单
