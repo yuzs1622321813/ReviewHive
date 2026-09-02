@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReviewHive — 项目结构</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --accent-dim: #1f6feb33;
+    --green: #3fb950;
+    --orange: #d29922;
+    --purple: #bc8cff;
+    --red: #f85149;
+    --cyan: #39d2c8;
+    --folder: #54aeff;
+    --file-py: #3572A5;
+    --file-js: #f1e05a;
+    --file-json: #cb8ef5;
+    --file-yaml: #e6417d;
+    --file-md: #083fa1;
+    --file-html: #e34c26;
+    --file-css: #563d7c;
+    --file-sh: #89e051;
+    --file-java: #b07219;
+    --file-docker: #384d54;
+    --file-toml: #9c4221;
+    --hover: #1c2128;
+    --radius: 6px;
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.6;
+    padding: 0;
+  }
+
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 24px 32px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+
+  .header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .header h1 span { color: var(--accent); }
+
+  .header p {
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .toolbar button {
+    background: var(--bg);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 5px 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 13px;
+    font-family: var(--sans);
+    transition: all .15s;
+  }
+
+  .toolbar button:hover {
+    color: var(--text);
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .search-box {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 5px 12px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-family: var(--sans);
+    width: 220px;
+    outline: none;
+    transition: border-color .15s;
+  }
+
+  .search-box:focus { border-color: var(--accent); }
+  .search-box::placeholder { color: var(--text-dim); }
+
+  .stats {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 32px 80px;
+  }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 12px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-dim);
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* Tree styles */
+  .tree { list-style: none; }
+  .tree .tree { padding-left: 0; }
+
+  .tree-item {
+    position: relative;
+  }
+
+  .tree-row {
+    display: flex;
+    align-items: baseline;
+    padding: 3px 8px 3px 0;
+    border-radius: var(--radius);
+    cursor: default;
+    transition: background .1s;
+    gap: 6px;
+  }
+
+  .tree-row:hover { background: var(--hover); }
+
+  .toggle {
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    color: var(--text-dim);
+    font-size: 11px;
+    transition: transform .15s, color .15s;
+    user-select: none;
+    border-radius: 3px;
+  }
+
+  .toggle:hover { color: var(--accent); background: var(--accent-dim); }
+  .toggle.collapsed { transform: rotate(-90deg); }
+  .toggle.leaf { visibility: hidden; }
+
+  .icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  .name {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    white-space: nowrap;
+    color: var(--text);
+  }
+
+  .name.folder { color: var(--folder); font-weight: 500; }
+
+  .desc {
+    color: var(--text-dim);
+    font-size: 12.5px;
+    margin-left: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  .badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-family: var(--mono);
+    font-weight: 500;
+    flex-shrink: 0;
+    margin-left: 6px;
+  }
+
+  .badge-module { background: #1f6feb22; color: var(--accent); border: 1px solid #1f6feb44; }
+  .badge-entry { background: #3fb95022; color: var(--green); border: 1px solid #3fb95044; }
+  .badge-static { background: #d2992222; color: var(--orange); border: 1px solid #d2992244; }
+  .badge-config { background: #bc8cff22; color: var(--purple); border: 1px solid #bc8cff44; }
+  .badge-data { background: #f8514922; color: var(--red); border: 1px solid #f8514944; }
+  .badge-ui { background: #39d2c822; color: var(--cyan); border: 1px solid #39d2c844; }
+
+  .children {
+    overflow: hidden;
+    transition: max-height .2s ease-out;
+  }
+
+  .children.hidden {
+    max-height: 0 !important;
+    overflow: hidden;
+  }
+
+  .tree-item.search-hidden { display: none; }
+  .tree-row.search-match .name { color: var(--accent); }
+  .tree-row.search-match .desc { color: var(--text); }
+
+  mark {
+    background: #d299224d;
+    color: var(--text);
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+
+  .depth-guides {
+    position: relative;
+  }
+
+  @media (max-width: 768px) {
+    .header { padding: 16px; }
+    .container { padding: 16px 12px 60px; }
+    .desc { display: none; }
+    .search-box { width: 160px; }
+    .stats { display: none; }
+  }
+
+  .file-count {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    margin-left: 4px;
+    opacity: 0.7;
+  }
+
+  .indent-line {
+    position: absolute;
+    left: 9px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border);
+    opacity: 0.4;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>ReviewHive</span> — 项目结构总览</h1>
+  <p>完全运行于本地模型的代码评审多 Agent 协作平台 · 点击文件夹展开/折叠，支持搜索过滤</p>
+  <div class="toolbar">
+    <button onclick="expandAll()">全部展开</button>
+    <button onclick="collapseAll()">全部折叠</button>
+    <button onclick="expandTo(2)">展开前两层</button>
+    <input type="text" class="search-box" id="searchInput" placeholder="搜索文件或描述..." oninput="doSearch(this.value)">
+    <span class="stats" id="stats"></span>
+  </div>
+</div>
+
+<div class="container">
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--folder)"></div>目录</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--file-py)"></div>Python</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--file-js)"></div>JavaScript</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--file-html)"></div>HTML</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--file-yaml)"></div>YAML / Config</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--file-docker)"></div>Docker</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--file-sh)"></div>Shell</div>
+    <div class="legend-item"><span class="badge badge-module">模块</span>核心包</div>
+    <div class="legend-item"><span class="badge badge-entry">入口</span>入口文件</div>
+    <div class="legend-item"><span class="badge badge-static">静态</span>纯静态分析</div>
+    <div class="legend-item"><span class="badge badge-config">配置</span>配置</div>
+    <div class="legend-item"><span class="badge badge-data">数据</span>数据/语料</div>
+    <div class="legend-item"><span class="badge badge-ui">前端</span>UI</div>
+  </div>
+
+  <ul class="tree" id="tree"></ul>
+</div>
+
+<script>
+const DATA = {
+  n: "reviewhive/", d: "项目根目录", c: [
+    { n: ".env.example", d: "环境变量示例（模型端点、配置路径覆盖）", b: ["配置"] },
+    { n: ".gitignore", d: "Git 忽略规则：排除 .venv、__pycache__、运行时数据、IDE 文件" },
+    { n: "GUIDE.html", d: "自包含使用指南：架构图解、评审协议、RAG 流程（浏览器直接打开）", b: ["入口"] },
+    { n: "LICENSE", d: "MIT 开源许可证" },
+    { n: "Makefile", d: "一键命令入口：install / serve / infra / models-start / test / ingest 等", b: ["入口"] },
+    { n: "README.md", d: "项目说明：特性、架构图、硬件要求、快速开始、模型清单" },
+    { n: "docker-compose.yml", d: "基础设施编排：Qdrant（向量库）+ Elasticsearch（关键词库）", b: ["配置"] },
+    { n: "docker-compose.observability.yml", d: "可选链路追踪：Arize Phoenix（OpenTelemetry 服务端）", b: ["配置"] },
+    { n: "pyproject.toml", d: "Python 包定义：依赖分组（core / local-models / datasets / observability / dev）", b: ["配置"] },
+
+    { n: "config/", d: "运行配置", c: [
+      { n: "settings.yaml", d: "全局配置：模型端点、RAG 参数、Agent 数量、内存开关、项目评审阈值", b: ["配置"] },
+    ]},
+
+    { n: "scripts/", d: "运维脚本", c: [
+      { n: "start_models.sh", d: "启动/停止 llama-server（主 LLM :8080 + VL :8082），支持 start|stop|status", b: ["入口"] },
+    ]},
+
+    { n: "data/", d: "语料与数据（运行时生成，大部分不入库）", b: ["数据"], c: [
+      { n: "corpus/", d: "内置种子语料", c: [
+        { n: "seed_java.json", d: "15 条高质量 Java 评审种子知识（CWE 漏洞模式 + 最佳实践），开箱即用", b: ["数据"] },
+      ]},
+      { n: "samples/", d: "前端演示样本", c: [
+        { n: "OrderService.java", d: "含典型缺陷的 Java 示例（SQL 注入、硬编码密钥、线程不安全等），用于前端「载入示例」" },
+      ]},
+      { n: "docs/", d: "第三方文档（make fetch-docs 下载，不入 git）：OWASP / 阿里规范 / p3c", c: [] },
+      { n: "reviewhive.db", d: "SQLite 会话数据库（运行时生成，不入 git）", b: ["数据"] },
+    ]},
+
+    { n: "reviewhive/", d: "核心 Python 包", b: ["模块"], c: [
+      { n: "__init__.py", d: "包初始化，版本号定义" },
+      { n: "cli.py", d: "Typer CLI 入口：serve / ingest / download-data / fetch-docs / health / review 命令", b: ["入口"] },
+      { n: "config.py", d: "Pydantic Settings 配置加载：settings.yaml → 环境变量 → settings.local.yaml 三层覆盖", b: ["配置"] },
+      { n: "observability.py", d: "链路追踪（可选）：OpenTelemetry span 上下文管理器 + OpenInference 语义标注 → Phoenix", b: ["模块"] },
+
+      { n: "models/", d: "模型客户端层 — 封装所有 LLM / 嵌入 / 重排 / 视觉调用", b: ["模块"], c: [
+        { n: "__init__.py", d: "包初始化" },
+        { n: "cache.py", d: "通用 LRU 调用缓存：对相同输入去重，避免重复推理（可配置 TTL + maxsize）" },
+        { n: "llm.py", d: "主 LLM 客户端：openai SDK 对接 llama-server（Qwen3.6-35B-A3B），含健康检查 + 调用缓存" },
+        { n: "embedding.py", d: "向量嵌入：本地 bge-m3（sentence-transformers 进程内加载）或切换 OpenAI 兼容端点" },
+        { n: "reranker.py", d: "交叉编码器重排：bge-reranker-v2-m3，进程内加载，对检索结果精排" },
+        { n: "vision.py", d: "多模态客户端：Qwen3-VL（llama-server --mmproj），解读架构图/截图，含健康检查 + 缓存" },
+      ]},
+
+      { n: "agents/", d: "Agent 层 — 主 Agent 编排 + 子 Agent 执行", b: ["模块"], c: [
+        { n: "__init__.py", d: "包初始化" },
+        { n: "base.py", d: "子 Agent 基类：JSON 协议驱动技能循环（skill → observe → skill → ... → final），含 OTel span" },
+        { n: "orchestrator.py", d: "主 Agent：评审规划（动态选择子 Agent + 关注点）与结果汇总（去重、定级、总结）" },
+        { n: "profiles.py", d: "五个子 Agent 角色定义：security / performance / style / test / vision，各含系统提示词" },
+      ]},
+
+      { n: "core/", d: "核心流水线与数据结构", b: ["模块"], c: [
+        { n: "__init__.py", d: "包初始化" },
+        { n: "schema.py", d: "全链路数据结构：KBChunk / ReviewInput / ReviewPlan / Finding / ReviewReport / StreamEvent" },
+        { n: "pipeline.py", d: "评审流水线主干：受理 → 规划 → 检索 → 并行评审 → 汇总，含依赖容器 HiveDeps（惰性加载 + 锁）" },
+        { n: "store.py", d: "SQLite 会话持久化：保存评审输入、状态、报告，支持列表查询" },
+        { n: "memory.py", d: "长期记忆系统：preference / project_fact / lesson 三类，SQLite 存储 + 向量召回 + 反思写入" },
+      ]},
+
+      { n: "rag/", d: "RAG 检索层 — 切片 / 入库 / 混合召回", b: ["模块"], c: [
+        { n: "__init__.py", d: "包初始化" },
+        { n: "chunking.py", d: "可插拔文本切片器：结构感知（代码按函数/类切分，文档按标题层级），块 ≤1500 字" },
+        { n: "vectorstore.py", d: "Qdrant 向量库客户端：写入/检索/计数，payload 完整保存 KBChunk" },
+        { n: "keywordstore.py", d: "Elasticsearch BM25 关键词库：兜住向量检索对精确符号/标识符召回弱的场景" },
+        { n: "retriever.py", d: "混合检索：Qdrant 语义 + ES 关键词 → RRF 融合 → bge-reranker 精排 → top-k" },
+        { n: "ingest.py", d: "知识库入库编排：种子 JSON + 数据集 JSONL + 文档 md → 统一切片 → 双库写入" },
+        { n: "documents.py", d: "文档语料加载：data/docs 下的 md/pdf → KBChunk，切片委托 chunking 模块" },
+      ]},
+
+      { n: "skills/", d: "技能体系 — 子 Agent 可调用的工具集", b: ["模块"], c: [
+        { n: "__init__.py", d: "包初始化" },
+        { n: "registry.py", d: "技能注册表：统一登记、自省（生成系统提示词中的技能列表）与执行分发" },
+        { n: "builtin.py", d: "内置技能实现：read_file / grep_code / search_kb / analyze_diff / read_image" },
+        { n: "context.py", d: "技能执行上下文 SkillContext：封装工作区文件访问、检索器、视觉客户端" },
+      ]},
+
+      { n: "project/", d: "项目级评审 — 对完整代码仓库的静态扫描 + 深度评审", b: ["静态", "模块"], c: [
+        { n: "__init__.py", d: "包初始化" },
+        { n: "scanner.py", d: "AST 静态扫描（纯 stdlib）：危险调用 / 硬编码密钥 / 异常吞没 / 复杂度评分" },
+        { n: "graph.py", d: "导入图构建：解析 import/from-import，构建正向/反向依赖边，支持相对导入解析" },
+        { n: "interfaces.py", d: "接口签名提取：class/function 签名渲染（含注解、行号），为深度评审提供上下文" },
+        { n: "report.py", d: "项目评审报告模型 + 终端彩色渲染（severity_counts / format_report）" },
+        { n: "reviewer.py", d: "项目评审编排：扫描 → 选文件 → 并发深审（LLM）→ merge_findings 去重合并" },
+      ]},
+
+      { n: "data/", d: "数据下载与语料获取", b: ["数据"], c: [
+        { n: "__init__.py", d: "包初始化" },
+        { n: "datasets.py", d: "开源数据集下载器：CodeReviewer / CodeXGLZZ 缺陷检测 → 统一 JSONL 格式" },
+        { n: "docs_fetch.py", d: "官方文档下载器：OWASP Cheat Sheet（精选 16 篇）+ 阿里 Java 规范 + p3c → data/docs/" },
+      ]},
+
+      { n: "api/", d: "Web 服务层 — FastAPI + SSE + 前端", b: ["模块"], c: [
+        { n: "__init__.py", d: "包初始化" },
+        { n: "app.py", d: "FastAPI 应用装配：lifespan 内初始化依赖（LLM/嵌入/内存）、挂载静态文件、注册路由" },
+        { n: "routes.py", d: "API 路由：POST /api/review（创建评审）、GET /api/stream/{id}（SSE 事件流）、GET /api/health、GET /api/skills" },
+
+        { n: "static/", d: "前端静态资源（单页应用）", b: ["前端"], c: [
+          { n: "index.html", d: "前端入口 HTML：暗色主题单页，评审面板 + 实时日志 + 发现列表" },
+          { n: "app.js", d: "前端逻辑：SSE 连接、评审流程控制、代码编辑器、结果渲染、健康轮询" },
+          { n: "style.css", d: "前端样式：暗色主题、响应式布局、代码高亮、动画" },
+        ]},
+      ]},
+    ]},
+
+    { n: "tests/", d: "测试套件（pytest，125 个用例）", c: [
+      { n: "test_schema.py", d: "数据结构单元测试：KBChunk / Finding / ReviewReport 序列化验证" },
+      { n: "test_chunking.py", d: "切片器测试：代码结构感知切片、文档标题层级切片、边界情况" },
+      { n: "test_retriever.py", d: "混合检索测试：RRF 融合、reranker 精排逻辑" },
+      { n: "test_documents.py", d: "文档加载测试：md → KBChunk 转换" },
+      { n: "test_registry.py", d: "技能注册表测试：注册、自省、执行分发" },
+      { n: "test_extract_json.py", d: "Agent JSON 提取测试：从 LLM 输出中解析 action/final 协议" },
+      { n: "test_observability.py", d: "链路追踪测试：span 上下文管理器、属性标注" },
+      { n: "test_noproxy.py", d: "无代理模式测试：确保本地调用不走 HTTP 代理" },
+      { n: "test_api.py", d: "API 集成测试：端到端评审流程（需运行中的服务）" },
+      { n: "test_scanner.py", d: "AST 扫描测试：危险调用 / 密钥 / 复杂度 / 排除目录等 18 个场景", b: ["静态"] },
+      { n: "test_graph.py", d: "导入图测试：正向/反向边、相对导入、第三方忽略、自环", b: ["静态"] },
+      { n: "test_interfaces.py", d: "接口签名测试：渲染、私有过滤、行号、注解、截断", b: ["静态"] },
+      { n: "test_report.py", d: "报告模型测试：severity_counts、format_report 渲染", b: ["静态"] },
+      { n: "test_reviewer.py", d: "merge_findings 去重测试：精确去重 / Jaccard 合并 / 行号重叠 / 排序", b: ["静态"] },
+      { n: "test_cli_review.py", d: "CLI review 命令测试：--scan-only / JSON 输出 / --fail-on 阈值", b: ["静态"] },
+    ]},
+  ]
+};
+
+// File type icon mapping
+function getIcon(name, isFolder) {
+  if (isFolder) return '<span style="color:var(--folder)">📁</span>';
+  const ext = name.split('.').pop().toLowerCase();
+  const icons = {
+    py: '<span style="color:var(--file-py)">🐍</span>',
+    js: '<span style="color:var(--file-js)">JS</span>',
+    json: '<span style="color:var(--file-json)">{}</span>',
+    yaml: '<span style="color:var(--file-yaml)">⚙</span>',
+    yml: '<span style="color:var(--file-docker)">⎕</span>',
+    md: '<span style="color:var(--file-md)">M↓</span>',
+    html: '<span style="color:var(--file-html)">◇</span>',
+    css: '<span style="color:var(--file-css)">#</span>',
+    sh: '<span style="color:var(--file-sh)">▶</span>',
+    java: '<span style="color:var(--file-java)">☕</span>',
+    toml: '<span style="color:var(--file-toml)">⚙</span>',
+  };
+  if (name === 'Makefile' || name === 'LICENSE') return '<span style="color:var(--text-dim)">📄</span>';
+  if (name.startsWith('.git')) return '<span style="color:var(--text-dim)">⚙</span>';
+  return icons[ext] || '<span style="color:var(--text-dim)">📄</span>';
+}
+
+function getExtColor(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const colors = {
+    py: 'var(--file-py)', js: 'var(--file-js)', json: 'var(--file-json)',
+    yaml: 'var(--file-yaml)', yml: 'var(--file-docker)', md: 'var(--file-md)',
+    html: 'var(--file-html)', css: 'var(--file-css)', sh: 'var(--file-sh)',
+    java: 'var(--file-java)', toml: 'var(--file-toml)',
+  };
+  return colors[ext] || 'var(--text-dim)';
+}
+
+const badgeClass = { '模块': 'badge-module', '入口': 'badge-entry', '静态': 'badge-static', '配置': 'badge-config', '数据': 'badge-data', '前端': 'badge-ui' };
+
+let totalFiles = 0;
+let totalFolders = 0;
+
+function buildTree(node, depth = 0) {
+  const li = document.createElement('li');
+  li.className = 'tree-item';
+  li.dataset.depth = depth;
+
+  const row = document.createElement('div');
+  row.className = 'tree-row';
+  row.style.paddingLeft = (depth * 24 + 4) + 'px';
+
+  const isFolder = !!node.c;
+  if (isFolder) totalFolders++; else totalFiles++;
+
+  // Toggle arrow
+  const toggle = document.createElement('span');
+  toggle.className = 'toggle' + (isFolder ? '' : ' leaf');
+  toggle.textContent = '▼';
+  if (isFolder && depth >= 2) toggle.classList.add('collapsed');
+  row.appendChild(toggle);
+
+  // Icon
+  const icon = document.createElement('span');
+  icon.className = 'icon';
+  icon.innerHTML = getIcon(node.n, isFolder);
+  row.appendChild(icon);
+
+  // Name
+  const name = document.createElement('span');
+  name.className = 'name' + (isFolder ? ' folder' : '');
+  name.textContent = node.n;
+  if (!isFolder) name.style.color = getExtColor(node.n);
+  name.dataset.searchable = node.n;
+  row.appendChild(name);
+
+  // Description
+  if (node.d) {
+    const desc = document.createElement('span');
+    desc.className = 'desc';
+    desc.textContent = node.d;
+    desc.dataset.searchable = node.d;
+    row.appendChild(desc);
+  }
+
+  // Badges
+  if (node.b) {
+    node.b.forEach(b => {
+      const badge = document.createElement('span');
+      badge.className = 'badge ' + (badgeClass[b] || 'badge-module');
+      badge.textContent = b;
+      row.appendChild(badge);
+    });
+  }
+
+  // File count for folders
+  if (isFolder) {
+    const count = document.createElement('span');
+    count.className = 'file-count';
+    const cnt = countNodes(node.c);
+    count.textContent = cnt + ' 项';
+    row.appendChild(count);
+  }
+
+  li.appendChild(row);
+
+  // Children
+  if (isFolder && node.c) {
+    const childUl = document.createElement('ul');
+    childUl.className = 'tree children' + (depth >= 2 ? ' hidden' : '');
+    node.c.forEach(child => {
+      childUl.appendChild(buildTree(child, depth + 1));
+    });
+    li.appendChild(childUl);
+
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isHidden = childUl.classList.contains('hidden');
+      if (isHidden) {
+        childUl.classList.remove('hidden');
+        childUl.style.maxHeight = childUl.scrollHeight + 500 + 'px';
+        toggle.classList.remove('collapsed');
+      } else {
+        childUl.classList.add('hidden');
+        childUl.style.maxHeight = '0px';
+        toggle.classList.add('collapsed');
+      }
+    });
+
+    row.addEventListener('click', () => toggle.click());
+
+    // Set initial max-height for expanded nodes
+    if (depth < 2) {
+      setTimeout(() => {
+        childUl.style.maxHeight = 'none';
+      }, 0);
+    }
+  }
+
+  return li;
+}
+
+function countNodes(arr) {
+  if (!arr) return 0;
+  let count = arr.length;
+  arr.forEach(n => { if (n.c) count += countNodes(n.c); });
+  return count;
+}
+
+// Init
+const treeEl = document.getElementById('tree');
+treeEl.appendChild(buildTree(DATA));
+document.getElementById('stats').textContent = `${totalFolders} 个目录 · ${totalFiles} 个文件`;
+
+// Expand all
+function expandAll() {
+  document.querySelectorAll('.children').forEach(el => {
+    el.classList.remove('hidden');
+    el.style.maxHeight = 'none';
+  });
+  document.querySelectorAll('.toggle').forEach(t => t.classList.remove('collapsed'));
+}
+
+// Collapse all
+function collapseAll() {
+  document.querySelectorAll('.children').forEach(el => {
+    el.classList.add('hidden');
+    el.style.maxHeight = '0px';
+  });
+  document.querySelectorAll('.toggle:not(.leaf)').forEach(t => t.classList.add('collapsed'));
+}
+
+// Expand to depth
+function expandTo(maxDepth) {
+  collapseAll();
+  document.querySelectorAll('.tree-item').forEach(item => {
+    const d = parseInt(item.dataset.depth);
+    if (d < maxDepth) {
+      const children = item.querySelector(':scope > .children');
+      if (children) {
+        children.classList.remove('hidden');
+        children.style.maxHeight = 'none';
+        const t = item.querySelector(':scope > .tree-row > .toggle');
+        if (t) t.classList.remove('collapsed');
+      }
+    }
+  });
+}
+
+// Search
+function doSearch(query) {
+  const q = query.toLowerCase().trim();
+  const items = document.querySelectorAll('.tree-item');
+
+  if (!q) {
+    items.forEach(item => {
+      item.classList.remove('search-hidden');
+      const row = item.querySelector(':scope > .tree-row');
+      row.classList.remove('search-match');
+      // Restore original text (remove marks)
+      row.querySelectorAll('.name, .desc').forEach(el => {
+        el.innerHTML = el.textContent;
+      });
+    });
+    return;
+  }
+
+  // First pass: mark matches
+  items.forEach(item => {
+    const row = item.querySelector(':scope > .tree-row');
+    const nameEl = row.querySelector('.name');
+    const descEl = row.querySelector('.desc');
+    const nameText = (nameEl.dataset.searchable || nameEl.textContent).toLowerCase();
+    const descText = descEl ? (descEl.dataset.searchable || descEl.textContent).toLowerCase() : '';
+    const match = nameText.includes(q) || descText.includes(q);
+
+    row.classList.toggle('search-match', match);
+
+    // Highlight
+    [nameEl, descEl].forEach(el => {
+      if (!el) return;
+      const orig = el.dataset.searchable || el.textContent;
+      if (orig.toLowerCase().includes(q)) {
+        const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        el.innerHTML = orig.replace(regex, '<mark>$1</mark>');
+      } else {
+        el.innerHTML = el.textContent;
+      }
+    });
+  });
+
+  // Second pass: show matches + their ancestors
+  items.forEach(item => item.classList.add('search-hidden'));
+
+  items.forEach(item => {
+    const row = item.querySelector(':scope > .tree-row');
+    if (row.classList.contains('search-match')) {
+      item.classList.remove('search-hidden');
+      // Show all ancestors
+      let parent = item.parentElement;
+      while (parent) {
+        if (parent.classList && parent.classList.contains('tree-item')) {
+          parent.classList.remove('search-hidden');
+          const ch = parent.querySelector(':scope > .children');
+          if (ch) {
+            ch.classList.remove('hidden');
+            ch.style.maxHeight = 'none';
+            const t = parent.querySelector(':scope > .tree-row > .toggle');
+            if (t) t.classList.remove('collapsed');
+          }
+        }
+        parent = parent.parentElement;
+      }
+    }
+  });
+}
+
+// Keyboard shortcut: / to focus search
+document.addEventListener('keydown', (e) => {
+  if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+    e.preventDefault();
+    document.getElementById('searchInput').focus();
+  }
+  if (e.key === 'Escape') {
+    const input = document.getElementById('searchInput');
+    if (document.activeElement === input) {
+      input.value = '';
+      doSearch('');
+      input.blur();
+    }
+  }
+});
+</script>
+</body>
+</html>

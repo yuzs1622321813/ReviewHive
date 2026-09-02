@@ -12,6 +12,7 @@ build/
 data/*.db
 data/downloads/
 data/uploads/
+data/docs/
 .run/
 
 # IDE

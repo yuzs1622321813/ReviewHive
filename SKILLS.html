@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReviewHive Skills 系统详解</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2333;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 0;
+  }
+
+  /* Header */
+  .hero {
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1a2332 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 60px 40px 50px;
+    text-align: center;
+  }
+  .hero h1 {
+    font-size: 2.6em;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+  }
+  .hero p { color: var(--text2); font-size: 1.15em; max-width: 700px; margin: 0 auto; }
+
+  /* Nav */
+  .toc {
+    max-width: 1100px;
+    margin: -24px auto 0;
+    padding: 0 20px;
+    position: relative;
+    z-index: 2;
+  }
+  .toc-inner {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 28px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+  }
+  .toc a {
+    color: var(--accent);
+    text-decoration: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+  .toc a:hover { background: var(--surface2); }
+
+  /* Main */
+  .main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+  }
+
+  section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    margin-bottom: 28px;
+  }
+  section h2 {
+    font-size: 1.5em;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  section h2 .icon { font-size: 1.2em; }
+  section h3 {
+    font-size: 1.15em;
+    color: var(--accent);
+    margin: 22px 0 10px;
+  }
+  p, li { color: var(--text); margin-bottom: 8px; }
+  ul, ol { padding-left: 24px; }
+
+  /* File path badges */
+  .file-path {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 10px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85em;
+    color: var(--accent);
+    margin: 2px 0;
+  }
+
+  /* Code blocks */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.88em;
+    line-height: 1.6;
+    margin: 12px 0;
+    color: var(--text);
+  }
+  code {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.88em;
+    color: var(--purple);
+  }
+  pre code { background: none; padding: 0; color: inherit; }
+
+  /* Flow diagram */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 24px 0;
+  }
+  .flow-node {
+    background: var(--surface2);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 20px;
+    text-align: center;
+    min-width: 140px;
+    position: relative;
+  }
+  .flow-node.highlight { border-color: var(--accent); }
+  .flow-node .label { font-weight: 600; font-size: 0.95em; }
+  .flow-node .sub { font-size: 0.78em; color: var(--text2); margin-top: 4px; }
+  .flow-arrow {
+    font-size: 1.4em;
+    color: var(--accent);
+    padding: 0 8px;
+    flex-shrink: 0;
+  }
+
+  /* Skill cards */
+  .skill-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .skill-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    transition: border-color 0.2s;
+  }
+  .skill-card:hover { border-color: var(--accent); }
+  .skill-card h4 {
+    color: var(--accent2);
+    font-size: 1.05em;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .skill-card h4 .tag {
+    font-size: 0.7em;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 8px;
+    color: var(--text2);
+    font-weight: 400;
+  }
+  .skill-card p { font-size: 0.9em; color: var(--text2); margin-bottom: 8px; }
+  .skill-card .params {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.82em;
+    color: var(--purple);
+    background: var(--code-bg);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-top: 8px;
+  }
+
+  /* Collapsible */
+  details {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 10px 0;
+    overflow: hidden;
+  }
+  details summary {
+    padding: 12px 18px;
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--accent);
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  details summary::before {
+    content: '▶';
+    font-size: 0.7em;
+    transition: transform 0.2s;
+    display: inline-block;
+  }
+  details[open] summary::before { transform: rotate(90deg); }
+  details .detail-body { padding: 0 18px 16px; }
+
+  /* Table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 0.92em;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface2);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  td { color: var(--text); }
+  tr:hover td { background: rgba(88, 166, 255, 0.04); }
+
+  /* Architecture diagram */
+  .arch-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    margin: 16px 0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--text2);
+  }
+  .arch-box .hl { color: var(--accent); }
+  .arch-box .hl2 { color: var(--accent2); }
+  .arch-box .hl3 { color: var(--orange); }
+  .arch-box .hl4 { color: var(--purple); }
+
+  .badge {
+    display: inline-block;
+    font-size: 0.72em;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+  .badge-sync { background: #1a3a2a; color: var(--accent2); border: 1px solid #2a5a3a; }
+  .badge-async { background: #1a2a3a; color: var(--accent); border: 1px solid #2a4a5a; }
+
+  @media (max-width: 700px) {
+    .hero { padding: 40px 20px 30px; }
+    .hero h1 { font-size: 1.8em; }
+    section { padding: 20px; }
+    .flow { flex-direction: column; }
+    .flow-arrow { transform: rotate(90deg); }
+    .skill-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>ReviewHive Skills 系统详解</h1>
+  <p>从注册、注入到执行循环——深入理解子 Agent 如何通过技能与代码工作区交互</p>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#overview">总览</a>
+    <a href="#architecture">架构图</a>
+    <a href="#files">文件地图</a>
+    <a href="#definition">技能定义</a>
+    <a href="#registry">注册表</a>
+    <a href="#context">执行上下文</a>
+    <a href="#loop">调用循环</a>
+    <a href="#contract">输出契约</a>
+    <a href="#builtin">内置技能</a>
+    <a href="#prompt">提示词注入</a>
+    <a href="#observability">可观测性</a>
+    <a href="#extend">扩展指南</a>
+  </div>
+</nav>
+
+<div class="main">
+
+<!-- 1. 总览 -->
+<section id="overview">
+  <h2><span class="icon">🔍</span> 总览</h2>
+  <p>ReviewHive 的 Skills 系统是子 Agent 与代码工作区之间的<strong>桥梁</strong>。每个子 Agent（安全、性能、规范、测试、视觉）在评审过程中，通过 LLM 输出的 JSON 指令来调用技能，获取代码内容、搜索结果、知识库片段等信息，最终汇总为结构化的 findings。</p>
+  <p>核心设计理念：</p>
+  <ul>
+    <li><strong>LLM 驱动</strong>：由大模型决定何时调用哪个技能、传什么参数，而非硬编码流程</li>
+    <li><strong>JSON 协议</strong>：Agent 与技能之间通过严格的 JSON 输出契约通信</li>
+    <li><strong>有限循环</strong>：每轮只能调用一个技能或输出最终结论，最多 N 轮后强制收敛</li>
+    <li><strong>上下文隔离</strong>：技能通过 <code>SkillContext</code> 访问工作区，不直接持有 Agent 状态</li>
+  </ul>
+</section>
+
+<!-- 2. 架构图 -->
+<section id="architecture">
+  <h2><span class="icon">🏗️</span> 架构图</h2>
+  <div class="arch-box"><span class="hl">┌─────────────────────────────────────────────────────────────────────┐</span>
+<span class="hl">│                        Pipeline (pipeline.py)                      │</span>
+<span class="hl">│  build_standard_registry() / build_vision_registry()               │</span>
+<span class="hl">│         ↓                              ↓                           │</span>
+<span class="hl">│  SkillRegistry ──────────────→  SubAgent(profile, registry, llm)   │</span>
+<span class="hl">└─────────────────────────────────────────────────────────────────────┘</span>
+                             │
+                             ▼
+<span class="hl2">┌─────────────────────────────────────────────────────────────────────┐</span>
+<span class="hl2">│                    SubAgent._run_inner()                            │</span>
+<span class="hl2">│                                                                     │</span>
+<span class="hl2">│   messages = [system_prompt + task_brief]                           │</span>
+<span class="hl2">│   for round in 1..max_loops:                                        │</span>
+<span class="hl2">│       raw = LLM.chat(messages)   ──→  {"action":"skill", ...}       │</span>
+<span class="hl2">│                                  ──→  {"action":"final", ...}       │</span>
+<span class="hl2">│       if skill:                                                       │</span>
+<span class="hl2">│           result = registry.execute(name, args, ctx)                │</span>
+<span class="hl2">│           messages.append(result)                                   │</span>
+<span class="hl2">│       if final:                                                       │</span>
+<span class="hl2">│           return AgentResult(findings, notes)                       │</span>
+<span class="hl2">└─────────────────────────────────────────────────────────────────────┘</span>
+                             │
+                             ▼
+<span class="hl3">┌─────────────────────────────────────────────────────────────────────┐</span>
+<span class="hl3">│                      SkillRegistry.execute()                        │</span>
+<span class="hl3">│   1. 查找 Skill 对象                                                 │</span>
+<span class="hl3">│   2. 开启 OTel span (skill.{name})                                  │</span>
+<span class="hl3">│   3. 调用 handler(args, ctx)                                        │</span>
+<span class="hl3">│   4. 支持 sync / async handler                                      │</span>
+<span class="hl3">│   5. 返回 str 结果                                                   │</span>
+<span class="hl3">└─────────────────────────────────────────────────────────────────────┘</span>
+                             │
+                             ▼
+<span class="hl4">┌─────────────────────────────────────────────────────────────────────┐</span>
+<span class="hl4">│                        SkillContext                                  │</span>
+<span class="hl4">│  workspace: ReviewWorkspace (files + diff)                          │</span>
+<span class="hl4">│  retriever: HybridRetriever | None  (知识库 RAG)                    │</span>
+<span class="hl4">│  vision:    VisionClient | None    (多模态图片解读)                  │</span>
+<span class="hl4">│  extra:     dict (images, memory_notes, ...)                        │</span>
+<span class="hl4">└─────────────────────────────────────────────────────────────────────┘</span></div>
+</section>
+
+<!-- 3. 文件地图 -->
+<section id="files">
+  <h2><span class="icon">📂</span> 文件地图</h2>
+  <p>Skills 系统涉及的所有源文件及其职责：</p>
+  <table>
+    <thead>
+      <tr><th>文件路径</th><th>职责</th><th>关键类 / 函数</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="file-path">reviewhive/skills/registry.py</span></td>
+        <td>技能定义与注册表</td>
+        <td><code>Skill</code>, <code>SkillRegistry</code></td>
+      </tr>
+      <tr>
+        <td><span class="file-path">reviewhive/skills/builtin.py</span></td>
+        <td>6 个内置技能实现 + 2 个注册表构建器</td>
+        <td><code>build_standard_registry()</code>, <code>build_vision_registry()</code></td>
+      </tr>
+      <tr>
+        <td><span class="file-path">reviewhive/skills/context.py</span></td>
+        <td>执行上下文：工作区 + 检索器 + 视觉客户端</td>
+        <td><code>SkillContext</code>, <code>ReviewWorkspace</code></td>
+      </tr>
+      <tr>
+        <td><span class="file-path">reviewhive/agents/base.py</span></td>
+        <td>子 Agent 基类，技能调用循环</td>
+        <td><code>SubAgent._run_inner()</code></td>
+      </tr>
+      <tr>
+        <td><span class="file-path">reviewhive/agents/profiles.py</span></td>
+        <td>5 个 Agent 角色配置</td>
+        <td><code>AgentProfile</code>, <code>ALL_PROFILES</code></td>
+      </tr>
+      <tr>
+        <td><span class="file-path">reviewhive/core/pipeline.py</span></td>
+        <td>主流程：构建注册表 → 创建 Agent → 运行评审</td>
+        <td><code>ReviewPipeline</code></td>
+      </tr>
+      <tr>
+        <td><span class="file-path">reviewhive/observability.py</span></td>
+        <td>OTel span 追踪（技能执行记录）</td>
+        <td><code>span()</code>, <code>KIND_TOOL</code></td>
+      </tr>
+      <tr>
+        <td><span class="file-path">reviewhive/core/schema.py</span></td>
+        <td>数据结构定义（AgentResult, Finding 等）</td>
+        <td><code>AgentResult</code>, <code>Finding</code>, <code>StreamEvent</code></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 4. 技能定义 -->
+<section id="definition">
+  <h2><span class="icon">📐</span> 技能定义</h2>
+  <p>每个技能是一个 <code>Skill</code> 数据类实例，定义在 <span class="file-path">reviewhive/skills/registry.py</span>：</p>
+  <pre><code>@dataclass
+class Skill:
+    name: str              # 技能唯一标识，如 "read_file"
+    description: str       # 自然语言描述（渲染到系统提示词）
+    parameters: dict       # JSON Schema，描述参数结构
+    handler: Handler       # 实际执行函数 (sync 或 async)
+    tags: list[str]        # 可选标签</code></pre>
+  <p><code>Handler</code> 类型签名：</p>
+  <pre><code>Handler = Callable[[dict[str, Any], SkillContext], Any]
+# 同步 handler 返回 str
+# 异步 handler 返回 Awaitable[str]</code></pre>
+
+  <h3>示例：read_file 技能定义</h3>
+  <pre><code># reviewhive/skills/builtin.py → _skill_read_file()
+
+Skill(
+    name="read_file",
+    description="读取工作区中某个文件的完整内容（带行号）",
+    parameters={
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "文件名"}
+        },
+        "required": ["path"],
+    },
+    handler=handler,  # 闭包函数，接收 (args, ctx)
+)</code></pre>
+</section>
+
+<!-- 5. 注册表 -->
+<section id="registry">
+  <h2><span class="icon">📋</span> 注册表</h2>
+  <p><code>SkillRegistry</code> 是技能的容器，提供注册、查询、提示词渲染、执行四大能力：</p>
+
+  <table>
+    <thead>
+      <tr><th>方法</th><th>作用</th><th>调用方</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>register(skill)</code></td><td>将技能加入注册表</td><td><code>build_*_registry()</code></td></tr>
+      <tr><td><code>render_prompt()</code></td><td>渲染可用技能列表为文本</td><td><code>SubAgent._system_prompt()</code></td></tr>
+      <tr><td><code>execute(name, args, ctx)</code></td><td>按名称查找并执行技能</td><td><code>SubAgent._run_inner()</code></td></tr>
+      <tr><td><code>describe()</code></td><td>返回技能元信息列表</td><td>API / 调试</td></tr>
+    </tbody>
+  </table>
+
+  <h3>两种注册表构建器</h3>
+  <p>定义在 <span class="file-path">reviewhive/skills/builtin.py</span>：</p>
+  <pre><code>def build_standard_registry() -> SkillRegistry:
+    """标准评审注册表：5 个技能"""
+    registry = SkillRegistry()
+    for skill in (
+        _skill_list_files(),    # 列出工作区文件
+        _skill_read_file(),     # 读取文件内容
+        _skill_grep_code(),     # 正则搜索代码
+        _skill_search_kb(),     # 知识库检索
+        _skill_analyze_diff(),  # 分析 diff
+    ):
+        registry.register(skill)
+    return registry
+
+def build_vision_registry() -> SkillRegistry:
+    """视觉评审注册表：3 个技能"""
+    registry = SkillRegistry()
+    for skill in (
+        _skill_list_files(),    # 列出工作区文件
+        _skill_read_image(),    # 解读图片
+        _skill_search_kb(),     # 知识库检索
+    ):
+        registry.register(skill)
+    return registry</code></pre>
+
+  <details>
+    <summary>注册表选择逻辑（pipeline.py）</summary>
+    <div class="detail-body">
+      <p>主流程 <span class="file-path">reviewhive/core/pipeline.py</span> 根据 Agent 角色决定使用哪个注册表：</p>
+      <ul>
+        <li><strong>vision</strong> Agent → <code>build_vision_registry()</code>（需要 read_image）</li>
+        <li><strong>其他</strong> Agent → <code>build_standard_registry()</code>（需要代码读取与搜索）</li>
+      </ul>
+    </div>
+  </details>
+</section>
+
+<!-- 6. 执行上下文 -->
+<section id="context">
+  <h2><span class="icon">🧩</span> 执行上下文 SkillContext</h2>
+  <p>定义在 <span class="file-path">reviewhive/skills/context.py</span>，技能处理器通过它访问一切外部资源：</p>
+
+  <pre><code>@dataclass
+class SkillContext:
+    workspace: ReviewWorkspace       # 代码工作区
+    retriever: HybridRetriever | None  # RAG 检索器
+    vision: VisionClient | None       # 多模态客户端
+    extra: dict                       # 扩展数据（图片、记忆等）</code></pre>
+
+  <h3>ReviewWorkspace</h3>
+  <p>封装一次评审提交的所有代码材料：</p>
+  <table>
+    <thead>
+      <tr><th>属性/方法</th><th>说明</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>files: dict[str, str]</code></td><td>文件名 → 文件内容的映射</td></tr>
+      <tr><td><code>diff: str</code></td><td>Unified diff 文本</td></tr>
+      <tr><td><code>names() → list[str]</code></td><td>所有文件名列表</td></tr>
+      <tr><td><code>read(name) → str | None</code></td><td>读取指定文件内容</td></tr>
+      <tr><td><code>combined(limit) → str</code></td><td>拼接所有文件（带截断）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>extra 字典常见键</h3>
+  <table>
+    <thead>
+      <tr><th>键</th><th>类型</th><th>用途</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>"images"</code></td><td><code>list[Attachment]</code></td><td>用户上传的图片列表（含 name, data_b64, mime）</td></tr>
+      <tr><td><code>"memory_notes"</code></td><td><code>str</code></td><td>记忆系统注入的上下文备注</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 7. 调用循环 -->
+<section id="loop">
+  <h2><span class="icon">🔄</span> 技能调用循环</h2>
+  <p>核心循环在 <span class="file-path">reviewhive/agents/base.py</span> 的 <code>SubAgent._run_inner()</code> 中：</p>
+
+  <div class="flow">
+    <div class="flow-node">
+      <div class="label">system_prompt</div>
+      <div class="sub">角色 + 技能列表 + 契约</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node highlight">
+      <div class="label">LLM.chat()</div>
+      <div class="sub">JSON 模式输出</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node">
+      <div class="label">extract_json()</div>
+      <div class="sub">解析 JSON 决策</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node">
+      <div class="label">分支判断</div>
+      <div class="sub">skill or final?</div>
+    </div>
+  </div>
+
+  <pre><code># reviewhive/agents/base.py → _run_inner() 简化逻辑
+
+async def _run_inner(self, ctx, focus_points, context_chunks, emit):
+    messages = [
+        {"role": "system", "content": self._system_prompt()},
+        {"role": "user",   "content": self._task_brief(ctx, ...)},
+    ]
+
+    for round_no in range(1, self.max_loops + 2):
+        force_final = round_no > self.max_loops
+
+        if force_final:
+            messages.append({"role": "user",
+                "content": "技能调用次数已达上限，请直接输出 final JSON。"})
+
+        raw = await self.llm.chat(messages, json_mode=True)
+        messages.append({"role": "assistant", "content": raw})
+        decision = extract_json(raw)
+
+        action = decision.get("action")
+
+        if action == "final" or force_final:
+            findings = _parse_findings(decision.get("findings", []))
+            return AgentResult(agent=self.profile.name,
+                               findings=findings,
+                               notes=decision.get("notes", ""))
+
+        if action == "skill":
+            skill_name = decision["skill"]
+            arguments  = decision["arguments"]
+            result = await self.registry.execute(skill_name, arguments, ctx)
+            messages.append({"role": "user",
+                "content": f"技能 {skill_name} 的执行结果：\n{result[:6000]}"})
+            continue</code></pre>
+
+  <h3>循环关键特性</h3>
+  <ul>
+    <li><strong>每轮一次</strong>：LLM 每轮只能调用一个技能或输出最终结论</li>
+    <li><strong>有限轮次</strong>：默认 <code>max_loops=4</code>，超出后强制输出 final</li>
+    <li><strong>结果截断</strong>：技能返回结果截断到 6000 字符，防止上下文膨胀</li>
+    <li><strong>错误恢复</strong>：JSON 解析失败时提示重试，未知 action 时提示纠正</li>
+    <li><strong>消息累积</strong>：每轮 LLM 输出和技能结果都追加到 messages，保持完整对话历史</li>
+  </ul>
+</section>
+
+<!-- 8. 输出契约 -->
+<section id="contract">
+  <h2><span class="icon">📜</span> 输出契约（JSON 协议）</h2>
+  <p>Agent 每轮必须输出且仅输出一个 JSON 对象，定义在 <span class="file-path">reviewhive/agents/base.py</span>：</p>
+
+  <h3>调用技能</h3>
+  <pre><code>{
+  "action": "skill",
+  "skill": "read_file",
+  "arguments": {
+    "path": "UserService.java"
+  }
+}</code></pre>
+
+  <h3>输出结论</h3>
+  <pre><code>{
+  "action": "final",
+  "findings": [
+    {
+      "severity": "high",
+      "category": "SQL 注入",
+      "file": "UserDao.java",
+      "lines": "42-45",
+      "title": "拼接 SQL 未做参数化",
+      "description": "外部输入 userId 直接拼入 SQL...",
+      "suggestion": "使用 PreparedStatement 参数化查询",
+      "code_snippet": "String sql = \"SELECT * FROM users WHERE id=\" + userId;",
+      "references": ["chunk_vuln_003"],
+      "confidence": 0.92
+    }
+  ],
+  "notes": "本次评审发现 1 个高危 SQL 注入风险"
+}</code></pre>
+
+  <h3>finding 字段说明</h3>
+  <table>
+    <thead>
+      <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>severity</code></td><td>enum</td><td>是</td><td>critical / high / medium / low / info</td></tr>
+      <tr><td><code>category</code></td><td>string</td><td>是</td><td>问题类别（如 SQL 注入、N+1 查询）</td></tr>
+      <tr><td><code>file</code></td><td>string</td><td>是</td><td>文件名</td></tr>
+      <tr><td><code>lines</code></td><td>string</td><td>否</td><td>行号或区间</td></tr>
+      <tr><td><code>title</code></td><td>string</td><td>是</td><td>一句话标题</td></tr>
+      <tr><td><code>description</code></td><td>string</td><td>是</td><td>问题描述与证据</td></tr>
+      <tr><td><code>suggestion</code></td><td>string</td><td>否</td><td>修改建议</td></tr>
+      <tr><td><code>code_snippet</code></td><td>string</td><td>否</td><td>相关代码片段</td></tr>
+      <tr><td><code>references</code></td><td>list[str]</td><td>否</td><td>引用的知识库 chunk id</td></tr>
+      <tr><td><code>confidence</code></td><td>float</td><td>否</td><td>置信度 0.0~1.0</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 9. 内置技能 -->
+<section id="builtin">
+  <h2><span class="icon">🛠️</span> 内置技能一览</h2>
+  <p>所有内置技能定义在 <span class="file-path">reviewhive/skills/builtin.py</span>：</p>
+
+  <div class="skill-grid">
+
+    <div class="skill-card">
+      <h4>list_files <span class="tag">标准 + 视觉</span></h4>
+      <p>列出工作区中所有代码文件名及其大小，是 Agent 了解提交范围的第一个技能。</p>
+      <div class="params">参数：无</div>
+      <p style="margin-top:8px"><span class="badge badge-sync">同步</span></p>
+    </div>
+
+    <div class="skill-card">
+      <h4>read_file <span class="tag">标准</span></h4>
+      <p>读取指定文件的完整内容并附带行号，支持文件名模糊匹配提示。</p>
+      <div class="params">path: string (必填)</div>
+      <p style="margin-top:8px"><span class="badge badge-sync">同步</span></p>
+    </div>
+
+    <div class="skill-card">
+      <h4>grep_code <span class="tag">标准</span></h4>
+      <p>在工作区代码中按正则表达式搜索，返回 文件:行号: 内容 格式的匹配行，最多 40 条。</p>
+      <div class="params">pattern: string (必填), file?: string</div>
+      <p style="margin-top:8px"><span class="badge badge-sync">同步</span></p>
+    </div>
+
+    <div class="skill-card">
+      <h4>search_kb <span class="tag">标准 + 视觉</span></h4>
+      <p>混合检索评审知识库（向量 + BM25 + 重排序），返回带 chunk id 的结果供引用。</p>
+      <div class="params">query: string (必填), kind?: string</div>
+      <p style="margin-top:8px"><span class="badge badge-async">异步</span></p>
+    </div>
+
+    <div class="skill-card">
+      <h4>analyze_diff <span class="tag">标准</span></h4>
+      <p>解析 unified diff，列出变更文件与 hunk 位置，快速定位评审范围。</p>
+      <div class="params">参数：无</div>
+      <p style="margin-top:8px"><span class="badge badge-sync">同步</span></p>
+    </div>
+
+    <div class="skill-card">
+      <h4>read_image <span class="tag">视觉</span></h4>
+      <p>调用本地 Qwen3-VL 多模态模型解读用户上传的架构图/截图，回答关于图片的问题。</p>
+      <div class="params">image: string (必填), question?: string</div>
+      <p style="margin-top:8px"><span class="badge badge-async">异步</span></p>
+    </div>
+
+  </div>
+
+  <h3>技能归属矩阵</h3>
+  <table>
+    <thead>
+      <tr><th>技能</th><th>security</th><th>performance</th><th>style</th><th>test</th><th>vision</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>list_files</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td>read_file</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>—</td></tr>
+      <tr><td>grep_code</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>—</td></tr>
+      <tr><td>search_kb</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td>analyze_diff</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>—</td></tr>
+      <tr><td>read_image</td><td>—</td><td>—</td><td>—</td><td>—</td><td>✓</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 10. 提示词注入 -->
+<section id="prompt">
+  <h2><span class="icon">💬</span> 提示词注入</h2>
+  <p>技能的描述文本通过 <code>SkillRegistry.render_prompt()</code> 自动注入到 Agent 的系统提示词中：</p>
+
+  <h3>渲染流程</h3>
+  <pre><code># reviewhive/skills/registry.py → render_prompt()
+
+def render_prompt(self) -> str:
+    lines = ["可用技能："]
+    for skill in self._skills.values():
+        params = ", ".join(
+            f"{pname}: {pspec.get('type', 'any')}"
+            for pname, pspec in skill.parameters.get("properties", {}).items()
+        )
+        lines.append(f"- {skill.name}({params})：{skill.description}")
+    return "\n".join(lines)</code></pre>
+
+  <h3>渲染结果示例（标准注册表）</h3>
+  <pre><code>可用技能：
+- list_files()：列出本次提交评审的所有代码文件及大小
+- read_file(path: string)：读取工作区中某个文件的完整内容（带行号）
+- grep_code(pattern: string, file: string)：在工作区代码中按正则搜索...
+- search_kb(query: string, kind: string)：混合检索评审知识库...
+- analyze_diff()：解析 unified diff...</code></pre>
+
+  <h3>注入位置</h3>
+  <pre><code># reviewhive/agents/base.py → _system_prompt()
+
+def _system_prompt(self) -> str:
+    principles = "\n".join(f"- {item}" for item in self.profile.principles)
+    return (
+        f"你是 ReviewHive 代码评审团队中的「{self.profile.title}」...\n"
+        f"使命：{self.profile.goal}\n"
+        f"评审原则：\n{principles}\n\n"
+        f"{self.registry.render_prompt()}\n\n"    # ← 技能列表注入此处
+        f"{_OUTPUT_CONTRACT}"                       # ← JSON 输出契约
+    )</code></pre>
+</section>
+
+<!-- 11. 可观测性 -->
+<section id="observability">
+  <h2><span class="icon">📡</span> 可观测性</h2>
+  <p>每次技能执行都会被 OpenTelemetry span 追踪，定义在 <span class="file-path">reviewhive/skills/registry.py</span>：</p>
+
+  <pre><code># reviewhive/skills/registry.py → execute()
+
+async def execute(self, name, arguments, ctx) -> str:
+    skill = self._skills.get(name)
+    if skill is None:
+        return f"错误：未知技能 {name}，..."
+
+    with span(
+        f"skill.{name}",           # span 名称
+        KIND_TOOL,                  # span 类型 = tool
+        {"arguments": json.dumps(arguments, ensure_ascii=False)[:500]}
+    ):
+        result = skill.handler(arguments or {}, ctx)
+        if inspect.isawaitable(result):
+            result = await result
+        return str(result)</code></pre>
+
+  <p>这些 span 会出现在 Arize Phoenix 等 OTel 兼容的追踪 UI 中，可以看到：</p>
+  <ul>
+    <li>每个 Agent 调用了哪些技能、调用顺序</li>
+    <li>每次技能调用的参数和耗时</li>
+    <li>技能调用在整个评审 pipeline 中的位置</li>
+  </ul>
+</section>
+
+<!-- 12. 扩展指南 -->
+<section id="extend">
+  <h2><span class="icon">🔧</span> 扩展指南：添加自定义技能</h2>
+
+  <h3>步骤 1：定义技能</h3>
+  <p>在 <span class="file-path">reviewhive/skills/builtin.py</span> 中添加新的工厂函数：</p>
+  <pre><code>def _skill_my_custom() -> Skill:
+    async def handler(args: dict, ctx: SkillContext) -> str:
+        param = str(args.get("param", ""))
+        # 通过 ctx.workspace 访问代码
+        # 通过 ctx.retriever 访问知识库
+        # 通过 ctx.vision 访问多模态
+        return f"执行结果：..."
+
+    return Skill(
+        name="my_custom",
+        description="描述这个技能做什么",
+        parameters={
+            "type": "object",
+            "properties": {
+                "param": {"type": "string", "description": "参数说明"},
+            },
+            "required": ["param"],
+        },
+        handler=handler,
+    )</code></pre>
+
+  <h3>步骤 2：注册到注册表</h3>
+  <pre><code>def build_standard_registry() -> SkillRegistry:
+    registry = SkillRegistry()
+    for skill in (
+        _skill_list_files(),
+        _skill_read_file(),
+        _skill_grep_code(),
+        _skill_search_kb(),
+        _skill_analyze_diff(),
+        _skill_my_custom(),     # ← 加入此处
+    ):
+        registry.register(skill)
+    return registry</code></pre>
+
+  <h3>步骤 3：自动生效</h3>
+  <p>无需修改 Agent 代码。新技能会：</p>
+  <ol>
+    <li>自动出现在 <code>render_prompt()</code> 的技能列表中</li>
+    <li>LLM 在系统提示词中看到新技能描述</li>
+    <li>LLM 可在 JSON 输出中通过 <code>{"action":"skill","skill":"my_custom","arguments":{...}}</code> 调用</li>
+    <li><code>registry.execute()</code> 自动路由到对应 handler</li>
+    <li>OTel span 自动记录执行过程</li>
+  </ol>
+</section>
+
+</div>
+
+</body>
+</html>
