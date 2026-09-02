@@ -29,6 +29,8 @@ def client(tmp_path):
     settings.models.embedding.base_url = "http://127.0.0.1:1/v1"  # 必然不可达，跳过本地模型加载
     settings.models.reranker.enabled = False
     settings.observability.enabled = False  # 测试不产生追踪数据
+    settings.memory.enabled = False  # 测试环境无可用 embedding，跳过记忆初始化
+    settings.resilience.startup_health_check = False  # 测试环境无真实服务，跳过健康检查
     app = create_app(settings)
     with TestClient(app) as test_client:
         yield test_client

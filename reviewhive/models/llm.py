@@ -13,8 +13,9 @@ from typing import Any
 import httpx
 from openai import APIStatusError, AsyncOpenAI, BadRequestError, OpenAIError
 
-from reviewhive.config import LLMConfig
+from reviewhive.config import LLMConfig, ResilienceConfig
 from reviewhive.models.cache import CallCache
+from reviewhive.resilience import CircuitBreaker, CircuitOpenError, CircuitState, RetryPolicy
 
 
 class LLMError(RuntimeError):
@@ -76,11 +77,31 @@ def build_openai_client(base_url: str, timeout_seconds: float) -> AsyncOpenAI:
     )
 
 
+_RETRYABLE_STATUS = {500, 502, 503, 504}
+
+
 class LLMClient:
-    def __init__(self, cfg: LLMConfig):
+    def __init__(self, cfg: LLMConfig, resilience: ResilienceConfig | None = None):
         self.cfg = cfg
         self._client = build_openai_client(cfg.base_url, cfg.timeout_seconds)
         self._cache = CallCache()
+        res = resilience or ResilienceConfig()
+        self._breaker = CircuitBreaker(
+            name="llm",
+            failure_threshold=res.llm_cb.failure_threshold,
+            recovery_timeout=res.llm_cb.recovery_timeout,
+            success_threshold=res.llm_cb.success_threshold,
+        )
+        self._retry = RetryPolicy(
+            max_retries=res.llm_retry.max_retries,
+            base_delay=res.llm_retry.base_delay,
+            max_delay=res.llm_retry.max_delay,
+            retryable_exceptions=(TimeoutError, ConnectionError, OSError),
+        )
+
+    @property
+    def is_available(self) -> bool:
+        return self._breaker.state != CircuitState.OPEN
 
     async def close(self) -> None:
         await self._client.close()
@@ -108,25 +129,39 @@ class LLMClient:
         }
         if json_mode:
             params["response_format"] = {"type": "json_object"}
-        try:
-            completion = await self._client.chat.completions.create(**params)
-        except BadRequestError:
-            if not json_mode:
-                raise LLMError("LLM 请求被拒绝（400）")
-            # 个别服务不支持 response_format，退化为普通请求
-            params.pop("response_format", None)
+
+        async def _do_chat() -> str:
             try:
-                completion = await self._client.chat.completions.create(**params)
-            except OpenAIError as exc:
-                raise LLMError(f"LLM 请求失败: {exc}") from exc
+                return await self._breaker.call(self._raw_chat, params)
+            except BadRequestError:
+                if json_mode and "response_format" in params:
+                    params.pop("response_format", None)
+                    return await self._breaker.call(self._raw_chat, params)
+                raise LLMError("LLM 请求被拒绝（400）")
+
+        try:
+            result = await self._retry.execute(_do_chat)
+        except CircuitOpenError as exc:
+            raise LLMError(f"LLM 服务熔断中: {exc}") from exc
         except OpenAIError as exc:
             raise LLMError(f"LLM 请求失败: {exc}") from exc
-        try:
-            result = completion.choices[0].message.content or ""
-        except (AttributeError, IndexError) as exc:
-            raise LLMError(f"LLM 响应结构异常: {str(completion)[:300]}") from exc
+
         self._cache.set(cache_key, result)
         return result
+
+    async def _raw_chat(self, params: dict[str, Any]) -> str:
+        try:
+            completion = await self._client.chat.completions.create(**params)
+        except APIStatusError as exc:
+            if exc.status_code in _RETRYABLE_STATUS:
+                raise ConnectionError(f"LLM 返回 {exc.status_code}") from exc
+            raise
+        except OpenAIError:
+            raise
+        try:
+            return completion.choices[0].message.content or ""
+        except (AttributeError, IndexError) as exc:
+            raise LLMError(f"LLM 响应结构异常: {str(completion)[:300]}") from exc
 
     async def chat_json(self, messages: list[dict[str, str]], **kwargs: Any) -> Any:
         raw = await self.chat(messages, json_mode=True, **kwargs)

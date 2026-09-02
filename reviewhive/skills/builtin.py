@@ -13,7 +13,9 @@ _MAX_GREP_MATCHES = 40
 _MAX_KB_CHARS = 4200
 
 
+# 工厂函数：创建 list_files 技能，列出工作区中所有已提交的代码文件及其字符数
 def _skill_list_files() -> Skill:
+    # handler：遍历工作区文件列表，输出文件名和大小；工作区为空时返回提示
     def handler(args: dict, ctx: SkillContext) -> str:
         names = ctx.workspace.names()
         if not names:
@@ -29,7 +31,9 @@ def _skill_list_files() -> Skill:
     )
 
 
+# 工厂函数：创建 read_file 技能，按文件名读取工作区中的代码文件并返回带行号的内容
 def _skill_read_file() -> Skill:
+    # handler：根据 path 参数查找文件，不存在时用 difflib 猜测相似文件名；存在则逐行加行号返回
     def handler(args: dict, ctx: SkillContext) -> str:
         name = str(args.get("path", "")).strip()
         content = ctx.workspace.read(name)
@@ -52,7 +56,9 @@ def _skill_read_file() -> Skill:
     )
 
 
+# 工厂函数：创建 grep_code 技能，在工作区代码中按正则表达式搜索匹配行
 def _skill_grep_code() -> Skill:
+    # handler：编译正则在指定文件或全部文件中逐行匹配，返回 文件:行号: 内容，最多 40 条
     def handler(args: dict, ctx: SkillContext) -> str:
         pattern = str(args.get("pattern", ""))
         target = str(args.get("file", "") or "")
@@ -92,7 +98,9 @@ def _skill_grep_code() -> Skill:
     )
 
 
+# 工厂函数：创建 search_kb 技能，通过混合检索器（向量+BM25+重排）查询评审知识库
 def _skill_search_kb() -> Skill:
+    # handler：将 query 和可选的 kind 传给 HybridRetriever，在线程池中执行检索，格式化返回 chunk id、类型和截断后的内容
     async def handler(args: dict, ctx: SkillContext) -> str:
         if ctx.retriever is None:
             return "知识库不可用（检索器未初始化）"
@@ -126,7 +134,9 @@ def _skill_search_kb() -> Skill:
     )
 
 
+# 工厂函数：创建 analyze_diff 技能，解析工作区中的 unified diff，提取变更文件和 hunk 位置
 def _skill_analyze_diff() -> Skill:
+    # handler：扫描 diff 提取文件行（+++/---）和 hunk 行（@@），输出摘要；diff 超过 3000 字符则截断
     def handler(args: dict, ctx: SkillContext) -> str:
         diff = ctx.workspace.diff
         if not diff:
@@ -152,7 +162,9 @@ def _skill_analyze_diff() -> Skill:
     )
 
 
+# 工厂函数：创建 read_image 技能，调用多模态模型解读用户上传的架构图或截图
 def _skill_read_image() -> Skill:
+    # handler：按文件名从 extra["images"] 中查找图片，base64 解码后调用 VisionClient.describe 回答用户问题
     async def handler(args: dict, ctx: SkillContext) -> str:
         if ctx.vision is None or not ctx.vision.enabled:
             return "多模态能力未启用"
@@ -182,6 +194,7 @@ def _skill_read_image() -> Skill:
     )
 
 
+# 构建标准技能注册表：包含 list_files、read_file、grep_code、search_kb、analyze_diff，供常规评审 Agent 使用
 def build_standard_registry() -> SkillRegistry:
     registry = SkillRegistry()
     for skill in (_skill_list_files(), _skill_read_file(), _skill_grep_code(), _skill_search_kb(), _skill_analyze_diff()):
@@ -189,6 +202,7 @@ def build_standard_registry() -> SkillRegistry:
     return registry
 
 
+# 构建视觉技能注册表：包含 list_files、read_image、search_kb，供 vision Agent 解读图片时使用
 def build_vision_registry() -> SkillRegistry:
     registry = SkillRegistry()
     for skill in (_skill_list_files(), _skill_read_image(), _skill_search_kb()):

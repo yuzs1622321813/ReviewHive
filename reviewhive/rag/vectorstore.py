@@ -1,12 +1,16 @@
 """向量库：Qdrant。payload 中完整保存 KBChunk，检索命中即自带内容。"""
 from __future__ import annotations
 
+import logging
 import uuid
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
 from reviewhive.core.schema import KBChunk
+from reviewhive.resilience import CircuitBreaker, CircuitOpenError
+
+logger = logging.getLogger(__name__)
 
 _NAMESPACE = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
@@ -16,9 +20,10 @@ def point_id(chunk_id: str) -> str:
 
 
 class QdrantStore:
-    def __init__(self, url: str, collection: str):
+    def __init__(self, url: str, collection: str, breaker: CircuitBreaker | None = None):
         self.collection = collection
         self._client = QdrantClient(url=url)
+        self._breaker = breaker
 
     def ensure(self, dim: int) -> None:
         if self._client.collection_exists(self.collection):
@@ -41,6 +46,15 @@ class QdrantStore:
         return len(points)
 
     def search(self, vector: list[float], top_k: int, kind: str | None = None) -> list[tuple[str, float, KBChunk]]:
+        if self._breaker is None:
+            return self._raw_search(vector, top_k, kind)
+        try:
+            return self._breaker.call_sync(self._raw_search, vector, top_k, kind)
+        except CircuitOpenError:
+            logger.warning("[%s] Qdrant 熔断器打开，跳过向量检索", self._breaker.name)
+            return []
+
+    def _raw_search(self, vector: list[float], top_k: int, kind: str | None = None) -> list[tuple[str, float, KBChunk]]:
         query_filter = None
         if kind:
             query_filter = qmodels.Filter(must=[qmodels.FieldCondition(key="chunk.kind", match=qmodels.MatchValue(value=kind))])

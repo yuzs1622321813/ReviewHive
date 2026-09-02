@@ -31,6 +31,7 @@ from reviewhive.observability import INPUT_VALUE, KIND_CHAIN, KIND_RETRIEVER, OU
 from reviewhive.rag.keywordstore import ESStore
 from reviewhive.rag.retriever import HybridRetriever
 from reviewhive.rag.vectorstore import QdrantStore
+from reviewhive.resilience import CircuitBreaker
 from reviewhive.skills.builtin import build_standard_registry, build_vision_registry
 from reviewhive.skills.context import ReviewWorkspace, SkillContext
 
@@ -46,10 +47,29 @@ class HiveDeps:
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.llm = LLMClient(settings.models.llm)
-        self.vision = VisionClient(settings.models.vision)
-        self.vectorstore = QdrantStore(settings.rag.qdrant_url, settings.rag.collection)
-        self.keywordstore = ESStore(settings.rag.es_url, settings.rag.es_index)
+        res = settings.resilience
+        self.llm = LLMClient(settings.models.llm, resilience=res)
+        self.vision = VisionClient(settings.models.vision, resilience=res)
+        self.vectorstore = QdrantStore(
+            settings.rag.qdrant_url,
+            settings.rag.collection,
+            breaker=CircuitBreaker(
+                name="qdrant",
+                failure_threshold=res.qdrant_cb.failure_threshold,
+                recovery_timeout=res.qdrant_cb.recovery_timeout,
+                success_threshold=res.qdrant_cb.success_threshold,
+            ),
+        )
+        self.keywordstore = ESStore(
+            settings.rag.es_url,
+            settings.rag.es_index,
+            breaker=CircuitBreaker(
+                name="es",
+                failure_threshold=res.es_cb.failure_threshold,
+                recovery_timeout=res.es_cb.recovery_timeout,
+                success_threshold=res.es_cb.success_threshold,
+            ),
+        )
         self.standard_registry = build_standard_registry()
         self.vision_registry = build_vision_registry()
         self.orchestrator = Orchestrator(
@@ -115,6 +135,29 @@ class HiveDeps:
         await self.llm.close()
         await self.vision.close()
 
+    async def health_check(self) -> dict[str, bool]:
+        """返回各服务健康状态。"""
+        import httpx
+
+        results: dict[str, bool] = {}
+        results["llm"] = await self.llm.healthy()
+        if self.settings.models.vision.enabled:
+            results["vision"] = await self.vision.healthy()
+        timeout = self.settings.resilience.health_check_timeout
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.get(f"{self.settings.rag.qdrant_url}/collections")
+                results["qdrant"] = resp.status_code == 200
+        except Exception:
+            results["qdrant"] = False
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.get(f"{self.settings.rag.es_url}/_cluster/health")
+                results["es"] = resp.status_code == 200
+        except Exception:
+            results["es"] = False
+        return results
+
 
 class ReviewPipeline:
     def __init__(self, deps: HiveDeps, store: SessionStore):
@@ -125,6 +168,49 @@ class ReviewPipeline:
         session_id = session_id or uuid.uuid4().hex[:12]
         report = ReviewReport(session_id=session_id)
         started = time.monotonic()
+
+        # 降级检查：LLM 不可用则直接拒绝
+        if not self.deps.llm.is_available:
+            report.status = "failed"
+            report.summary = "LLM 服务不可用（熔断器打开），无法评审"
+            report.duration_ms = int((time.monotonic() - started) * 1000)
+            self.store.finish(session_id, report.status, report.model_dump_json())
+            await emit(StreamEvent(type="error", data={"message": report.summary}))
+            await emit(StreamEvent(type="report", data=json.loads(report.model_dump_json())))
+            return report
+
+        # 降级状态汇总
+        services_status: dict[str, str] = {"llm": "ok"}
+        skipped_agents: list[str] = []
+        degradation_messages: list[str] = []
+
+        if self.deps.settings.models.vision.enabled:
+            if not self.deps.vision.is_available:
+                services_status["vision"] = "degraded"
+                skipped_agents.append("vision")
+                degradation_messages.append("Vision 服务不可用，已跳过多模态评审")
+            else:
+                services_status["vision"] = "ok"
+
+        # 检索器状态（Qdrant/ES 熔断器状态）
+        if self.deps.vectorstore._breaker and self.deps.vectorstore._breaker.is_open:
+            services_status["qdrant"] = "degraded"
+            degradation_messages.append("Qdrant 不可用，仅使用关键词检索")
+        else:
+            services_status["qdrant"] = "ok"
+        if self.deps.keywordstore._breaker and self.deps.keywordstore._breaker.is_open:
+            services_status["es"] = "degraded"
+            degradation_messages.append("Elasticsearch 不可用，仅使用向量检索")
+        else:
+            services_status["es"] = "ok"
+
+        if degradation_messages:
+            await emit(StreamEvent(type="degradation", data={
+                "services": services_status,
+                "skipped_agents": skipped_agents,
+                "message": "；".join(degradation_messages),
+            }))
+
         with span(
             "review.session",
             KIND_CHAIN,
@@ -236,7 +322,7 @@ class ReviewPipeline:
         memory_notes: str = "",
     ) -> list[AgentResult]:
         names = list(dict.fromkeys(plan.sub_agents))
-        if "vision" in names and (not images or not self.deps.settings.models.vision.enabled):
+        if "vision" in names and (not images or not self.deps.settings.models.vision.enabled or not self.deps.vision.is_available):
             names.remove("vision")
         if not names:
             names = list(self.deps.settings.review.sub_agents)

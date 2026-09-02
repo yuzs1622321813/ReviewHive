@@ -79,6 +79,27 @@ memory:                     # 长期记忆（单用户）：偏好/项目事实/
   maintain_every_sessions: 5
   dedup_similarity: 0.9     # 写入新记忆时去重的余弦相似度阈值
 
+resilience:                 # 熔断与重试策略
+  llm_cb:                   # 主 LLM 熔断器
+    failure_threshold: 3    # 连续失败 3 次后熔断
+    recovery_timeout: 30    # 30s 后试探恢复
+  llm_retry:                # 主 LLM 重试策略
+    max_retries: 2
+    base_delay: 1.0
+  vision_cb:                # Vision 模型熔断器（更保守）
+    failure_threshold: 2
+    recovery_timeout: 30
+  vision_retry:
+    max_retries: 1
+  qdrant_cb:                # Qdrant 向量库熔断器
+    failure_threshold: 5
+    recovery_timeout: 60
+  es_cb:                    # Elasticsearch 熔断器
+    failure_threshold: 5
+    recovery_timeout: 60
+  startup_health_check: true  # 启动时检查关键服务
+  health_check_timeout: 10    # 单次健康检查超时（秒）
+
 project:                    # 项目级评审（reviewhive review ./path）
   max_files: 10             # 进入 LLM 深审的文件上限
   min_score: 3              # 触发深审的最低风险分（0 分文件永远跳过）

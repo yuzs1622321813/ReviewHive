@@ -101,6 +101,29 @@ class MemoryConfig(BaseModel):
     dedup_similarity: float = 0.9           # 写入新记忆时去重的余弦相似度阈值
 
 
+class CircuitBreakerConfig(BaseModel):
+    failure_threshold: int = 3
+    recovery_timeout: float = 30.0
+    success_threshold: int = 2
+
+
+class RetryConfig(BaseModel):
+    max_retries: int = 2
+    base_delay: float = 1.0
+    max_delay: float = 10.0
+
+
+class ResilienceConfig(BaseModel):
+    llm_cb: CircuitBreakerConfig = CircuitBreakerConfig()
+    llm_retry: RetryConfig = RetryConfig(max_retries=2)
+    vision_cb: CircuitBreakerConfig = CircuitBreakerConfig(failure_threshold=2)
+    vision_retry: RetryConfig = RetryConfig(max_retries=1)
+    qdrant_cb: CircuitBreakerConfig = CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60)
+    es_cb: CircuitBreakerConfig = CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60)
+    startup_health_check: bool = True
+    health_check_timeout: float = 10.0
+
+
 class ProjectReviewConfig(BaseModel):
     max_files: int = 10                 # LLM 深审文件上限
     min_score: int = 3                  # 触发深审的最低风险分
@@ -118,6 +141,7 @@ class Settings(BaseModel):
     review: ReviewConfig = ReviewConfig()
     observability: ObservabilityConfig = ObservabilityConfig()
     memory: MemoryConfig = MemoryConfig()
+    resilience: ResilienceConfig = ResilienceConfig()
     project: ProjectReviewConfig = ProjectReviewConfig()
 
 

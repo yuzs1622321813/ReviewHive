@@ -1,10 +1,15 @@
 """关键词库：Elasticsearch BM25，兜住向量检索对精确符号/标识符召回弱的问题。"""
 from __future__ import annotations
 
+import logging
+
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 
 from reviewhive.core.schema import KBChunk
+from reviewhive.resilience import CircuitBreaker, CircuitOpenError
+
+logger = logging.getLogger(__name__)
 
 _MAPPING = {
     "properties": {
@@ -21,9 +26,10 @@ _MAPPING = {
 
 
 class ESStore:
-    def __init__(self, url: str, index: str):
+    def __init__(self, url: str, index: str, breaker: CircuitBreaker | None = None):
         self.index = index
         self._client = Elasticsearch(url, request_timeout=60, max_retries=0)
+        self._breaker = breaker
 
     def ensure(self) -> None:
         if not self._client.indices.exists(index=self.index):
@@ -52,6 +58,15 @@ class ESStore:
         return int(success)
 
     def search(self, query: str, top_k: int, kind: str | None = None) -> list[tuple[str, float, KBChunk]]:
+        if self._breaker is None:
+            return self._raw_search(query, top_k, kind)
+        try:
+            return self._breaker.call_sync(self._raw_search, query, top_k, kind)
+        except CircuitOpenError:
+            logger.warning("[%s] ES 熔断器打开，跳过关键词检索", self._breaker.name)
+            return []
+
+    def _raw_search(self, query: str, top_k: int, kind: str | None = None) -> list[tuple[str, float, KBChunk]]:
         must: list[dict] = [
             {
                 "multi_match": {
